@@ -1,0 +1,5 @@
+discord.py==2.3.2
+fastapi
+uvicorn[standard]
+pysqlite3
+python-dotenv
