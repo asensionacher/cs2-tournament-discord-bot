@@ -1,6 +1,6 @@
 from typing import List, Optional
 from sqlite3 import Connection
-from ..models.category import Category
+from models.category import Category
 
 class CategoryService:
     def __init__(self, conn: Connection):
@@ -43,7 +43,7 @@ class CategoryService:
         ]
     
     
-    def update_category(self, category: ServerRole):
+    def update_category(self, category: Category):
         """Update category values"""
         cursor = self.conn.execute(
             """

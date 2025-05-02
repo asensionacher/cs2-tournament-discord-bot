@@ -1,6 +1,6 @@
 from typing import List, Optional
 from sqlite3 import Connection
-from ..models.team import Team
+from models.team import Team
 
 class TeamService:
     def __init__(self, conn: Connection):

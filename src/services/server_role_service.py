@@ -1,6 +1,6 @@
 from typing import List, Optional
 from sqlite3 import Connection
-from ..models.server_role import ServerRole
+from models.server_role import ServerRole
 
 class ServerRoleService:
     def __init__(self, conn: Connection):

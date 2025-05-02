@@ -1,6 +1,6 @@
 from typing import List, Optional
 from sqlite3 import Connection
-from ..models.setting import Setting
+from models.setting import Setting
 
 class SettingService:
     def __init__(self, conn: Connection):

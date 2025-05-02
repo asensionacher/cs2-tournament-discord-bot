@@ -8,5 +8,5 @@ class ServerRole:
     """
     id: Optional[int] = None
     guild_id: Optional[int] = None
-    role_name: str
+    role_name: str = ""
     role_id: Optional[int] = None

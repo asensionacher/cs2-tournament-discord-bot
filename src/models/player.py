@@ -16,9 +16,13 @@ class Player:
     """
     Player assigned to a team
     """
+    
+    # Required fields first
+    role_name: PlayerRole  # 'captain', 'player', or 'coach'
+    
+    # Optional fields with defaults
     id: Optional[int] = None
     guild_id: Optional[int] = None
     team_id: Optional[int] = None
     nickname: str = ""
     steamid: str = ""
-    role_name: PlayerRole  # 'captain', 'player', or 'coach'

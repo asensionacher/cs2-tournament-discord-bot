@@ -1,6 +1,6 @@
 from typing import List, Optional
 from sqlite3 import Connection
-from ..models.channel import Channel
+from models.channel import Channel
 
 class ChannelService:
     def __init__(self, conn: Connection):
@@ -43,7 +43,7 @@ class ChannelService:
         ]
     
     
-    def update_channel(self, channel: ServerRole):
+    def update_channel(self, channel: Channel):
         """Update channel values"""
         cursor = self.conn.execute(
             """

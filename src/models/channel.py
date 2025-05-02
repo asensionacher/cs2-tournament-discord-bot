@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 @dataclass
-class channel:
+class Channel:
     """
     Represents a created channel in discord.
 

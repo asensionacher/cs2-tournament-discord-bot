@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 import discord
 from discord.ext import commands
 
-from services.database import DatabaseManager
+from services import DatabaseManager
 from models.team import Team
 from models.setting import Setting
 from models.server_role import ServerRole
@@ -25,60 +25,72 @@ Bot for creating a Counter Strike Tournament with 16 teams,
 swiss-round and knock-out stage.
 '''
 
+# Bot configuration
+intents = discord.Intents.default()
+intents.members = True
+intents.message_content = True
+
+bot = commands.Bot(
+    command_prefix=os.environ.get("BOT_PREFIX", "!"),
+    description=description,
+    intents=intents,
+    help_command=None
+)
+
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user} (ID: {bot.user.id})')
     print('------')
 
-@commands.command()
-    async def help(self, ctx):
-        """Show help information based on user role"""
-        guild = ctx.guild
-        admin_role = discord.utils.get(guild.roles, name="Admin")
-        
-        if not admin_role:
-            help_msg = ("🔧 **Initial Setup**\n"
-                    "• Send `!start` to create all necessary roles, categories and channels\n")
-            await ctx.send(help_msg)
-            return
+@bot.command()
+async def help(ctx):
+    """Show help information based on user role"""
+    guild = ctx.guild
+    admin_role = discord.utils.get(guild.roles, name="Admin")
+    
+    if not admin_role:
+        help_msg = ("🔧 **Initial Setup**\n"
+                "• Send `!start` to create all necessary roles, categories and channels\n")
+        await ctx.send(help_msg)
+        return
 
-        # Check if user has admin role
-        if admin_role not in ctx.author.roles:
-            await ctx.send("❌ You need the Admin role to view administrator commands")
-            return
+    # Check if user has admin role
+    if admin_role not in ctx.author.roles:
+        await ctx.send("❌ You need the Admin role to view administrator commands")
+        return
 
-        help_msg = (
-            "🎮 **CS2 Tournament Bot Help**\n\n"
-            "⚠️ Please use the #admin channel for all commands!\n\n"
-            "**Team Management:**\n"
-            "• `!create_team <teamname>` - Create a new team\n"
-            "• `!add_player <teamname> <nickname> <steamid> <role>` - Add player to team\n"
-            "  Roles can be: captain/coach/player\n"
-            "• `!delete_team <teamname>` - Delete team and its players\n"
-            "• `!remove_player <teamname> <nickname>` - Remove player from team\n\n"
-            
-            "**Tournament Flow:**\n"
-            "• `!mock_teams` - Create 16 test teams (for testing only)\n"
-            "• `!all_teams_created` - Lock teams and start tournament\n"
-            "  ⚠️ After this command, teams cannot be modified!\n\n"
-            
-            "**Round Management:**\n"
-            "• `!result <team_number>` - Set the result of the current map of a game.\n" 
-            "  ⚠️ This command should be executed in the public game channel.\n"
-            "  ⚠️ Winner should be 1 or 2 (team number)\n"
-            "• `!veto <map_name>` - Veto a map in the current game.\n"
-            "  ⚠️ This command should be executed in the public game channel.\n"
-            "  ⚠️ Only the captain of the team can veto a map.\n"
-            "• `!pick <map_name>` - Pick a map in the current game.\n"
-            "  ⚠️ Only the captain of the team can pick a map.\n\n"
-        )
+    help_msg = (
+        "🎮 **CS2 Tournament Bot Help**\n\n"
+        "⚠️ Please use the #admin channel for all commands!\n\n"
+        "**Team Management:**\n"
+        "• `!create_team <teamname>` - Create a new team\n"
+        "• `!add_player <teamname> <nickname> <steamid> <role>` - Add player to team\n"
+        "  Roles can be: captain/coach/player\n"
+        "• `!delete_team <teamname>` - Delete team and its players\n"
+        "• `!remove_player <teamname> <nickname>` - Remove player from team\n\n"
         
-        try:
-            await ctx.send(help_msg)
-            logger.info(f"Help message sent to {ctx.author.name}")
-        except discord.errors.HTTPException as e:
-            logger.error(f"Failed to send help message: {e}")
-            await ctx.send("❌ Error sending help message. Please check logs.")
+        "**Tournament Flow:**\n"
+        "• `!mock_teams` - Create 16 test teams (for testing only)\n"
+        "• `!all_teams_created` - Lock teams and start tournament\n"
+        "  ⚠️ After this command, teams cannot be modified!\n\n"
+        
+        "**Round Management:**\n"
+        "• `!result <team_number>` - Set the result of the current map of a game.\n" 
+        "  ⚠️ This command should be executed in the public game channel.\n"
+        "  ⚠️ Winner should be 1 or 2 (team number)\n"
+        "• `!veto <map_name>` - Veto a map in the current game.\n"
+        "  ⚠️ This command should be executed in the public game channel.\n"
+        "  ⚠️ Only the captain of the team can veto a map.\n"
+        "• `!pick <map_name>` - Pick a map in the current game.\n"
+        "  ⚠️ Only the captain of the team can pick a map.\n\n"
+    )
+    
+    try:
+        await ctx.send(help_msg)
+        logger.info(f"Help message sent to {ctx.author.name}")
+    except discord.errors.HTTPException as e:
+        logger.error(f"Failed to send help message: {e}")
+        await ctx.send("❌ Error sending help message. Please check logs.")
 
 
 @bot.command()
@@ -87,12 +99,13 @@ async def start(ctx):
     Initialize the server setup.
     It creates all categories, channels and settings.
     """
-
+    # TODO: If start, check if user is admin for execute.
+    guild = ctx.guild
     try:
         # No matter if already started, but roles should not be created twice.
         
         # If the admin server role don't exists, create it
-        admin_role = await self._create_server_role(ctx, "admin")
+        admin_role = await _create_server_role(ctx, "admin")
 
         # Create categories and channels
         private_overwrites = {
@@ -122,7 +135,7 @@ async def start(ctx):
             "Swiss stage round 3": {"position": 4, "overwrites": public_overwrites},
             "Swiss stage round 4": {"position": 5, "overwrites": public_overwrites},
             "Swiss stage round 5": {"position": 6, "overwrites": public_overwrites},
-            "Quarterfinals": {"position": 7, "poverwritesublic": public_overwrites},
+            "Quarterfinals": {"position": 7, "overwrites": public_overwrites},
             "Semifinals": {"position": 8, "overwrites": public_overwrites},
             "Third Place": {"position": 9, "overwrites": public_overwrites},
             "Final": {"position": 10, "overwrites": public_overwrites}
@@ -131,8 +144,7 @@ async def start(ctx):
         # For each category create it
         discord_categories = {}
         for name, config in categories.items():
-            category = 
-                await self._create_server_category(ctx, category_name=name, category_position=config[position], category_overwrites=config[overwrites])
+            category = await _create_server_category(ctx, category_name=name, category_position=config["position"], overwrites=config["overwrites"])
 
             discord_categories[name] = {
                 "category": category
@@ -141,16 +153,30 @@ async def start(ctx):
         # Create object of channels
 
         channels = {
-            "admin": {"category": discord_categories["Admin"].category, "overwrites": private_overwrites, "position": 0},
-            "teams": {"category": discord_categories["Info"].category, "overwrites": public_overwrites, "position": 0},
-            "summary": {"category": discord_categories["Info"].category, "overwrites": public_overwrites, "position": 1},
+            "admin": {"category": discord_categories["Admin"]["category"], "overwrites": private_overwrites, "position": 0},
+            "teams": {"category": discord_categories["Info"]["category"], "overwrites": public_overwrites, "position": 0},
+            "summary": {"category": discord_categories["Info"]["category"], "overwrites": public_overwrites, "position": 1},
         }
         # For each channel create it
         for name, config in channels.items():
-            category = 
-                await self._create_server_channel(ctx, channel_name=name, category_position=config[position], overwrites=config[overwrites])
+            await _create_server_text_channel(ctx, text_channel_name=name, text_channel_position=config["position"], 
+                                              category=config["category"], overwrites=config["overwrites"])
         
-        
+        settings = {
+            "swiss_not_to_three_wins": {"value": "bo3"},
+            "swiss_to_three_wins": {"value": "bo3"},
+            "quarterfinal_rounds": {"value": "bo3"},
+            "semifinal_rounds": {"value": "bo3"},
+            "final_rounds": {"value": "bo3"},
+            "third_place_rounds": {"value": "bo3"},
+            "start_executed": {"value": "true"}
+        }
+
+        # TODO: Use an external 
+        for key, config in settings.items():
+            await _create_server_setting(ctx, key, config["value"])
+
+        bot.setting_service.create_setting(start_setting)
     except Exception as e:
         await ctx.send(f"Error during setup: {str(e)}")
         logging.error(f"Setup error: {e}", exc_info=True)
@@ -193,23 +219,29 @@ def setup_logging():
     # Silence noisy loggers
     logging.getLogger('discord.http').setLevel(logging.WARNING)
 
-async def setup_database():
+def setup_database():
     """Initialize database and attach to bot instance"""
     bot.db = DatabaseManager()
     bot.team_service = TeamService(bot.db.get_connection())
     bot.setting_service = SettingService(bot.db.get_connection())
     bot.service_role_service = ServerRoleService(bot.db.get_connection())
+    bot.team_service = TeamService(bot.db.get_connection())
+    bot.setting_service = SettingService(bot.db.get_connection())
+    bot.server_role_service = ServerRoleService(bot.db.get_connection())
+    bot.category_service = CategoryService(bot.db.get_connection())
+    bot.channel_service = ChannelService(bot.db.get_connection())
     logging.info("Database and services initialized")
 
-async def _create_server_category(ctx, category_name:str, category_position:int, overwrites) -> discord.Category:
+async def _create_server_category(ctx, category_name:str, category_position:int, overwrites) -> discord.CategoryChannel:
     """
     Creates a server category taking in account also them to be stored in the DB
     """
     # Get category from discord
+    guild = ctx.guild
     discord_category = discord.utils.get(guild.categories, name=category_name)
     if discord_category is None: # If the category don't exist, create it on Discord and DB        
         discord_category = await guild.create_category(
-            category_name, 
+            name=category_name, 
             position=category_position, 
             overwrites=overwrites
         )
@@ -223,25 +255,26 @@ async def _create_server_category(ctx, category_name:str, category_position:int,
             bot.category_service.create_category(category)
     return discord_category
 
-async def _create_server_channel(ctx, channel_name:str, channel_position:int, category:discord.Category, overwrites:dict) -> discord.TextChannel:
+async def _create_server_text_channel(ctx, text_channel_name:str, text_channel_position:int, category:discord.CategoryChannel, overwrites) -> discord.TextChannel:
     """
     Creates a text channel taking in account also them to be stored in the DB
     """
+    guild = ctx.guild
     # Get text channels from discord
-    discord_channel = discord.utils.get(ctx.guild.channels, name=channel_name, category=category)
+    discord_channel = discord.utils.get(ctx.guild.channels, name=text_channel_name, category=category)
 
     if discord_channel is None: # If this text channel don't exist
-        discord_channel = await guild.create_channel(
-            channel_name, 
+        discord_channel = await guild.create_text_channel(
+            text_channel_name, 
             category=category, 
-            position=channel_position, 
+            position=text_channel_position, 
             overwrites=overwrites)
-        channel = bot.channel_service.get_channel_by_name(channel_name=channel_name, guild_id=ctx.guild.id)
+        channel = bot.channel_service.get_channel_by_name(channel_name=text_channel_name, guild_id=ctx.guild.id)
         if channel is not None: # The channel was removed manually from Discord, recreate
             channel.channel_id = discord_channel.id
             bot.channel_service.update_channel(channel)
-        else: Default stage, this don't exists in Discord neither on DB
-            channel = Channel(guild_id=ctx.guild.id, channel_name=channel_name, channel_id=discord_channel.id)
+        else: # Default stage, this don't exists in Discord neither on DB
+            channel = Channel(guild_id=ctx.guild.id, channel_name=text_channel_name, channel_id=discord_channel.id)
             bot.channel_service.create_channel(channel)
     return discord_channel    
 
@@ -249,14 +282,15 @@ async def _create_server_role(ctx, server_role_name: str) -> discord.Role:
     """
     Creates a server role taking in account also them to be stored in the DB
     """
+    guild = ctx.guild
     # Check if role exists by name in discord
     discord_server_role = discord.utils.get(guild.roles, name=server_role_name)
     if discord_server_role is None:  # The role don't exist on discord, create on Discord and upsert on DB
         # Create server role on discord
-        discord_server_role = ctx.guild.create_role(name=server_role_name, mentionable=True)
+        discord_server_role = await guild.create_role(name=server_role_name, mentionable=True)
 
         # Get server role by name in DB
-        server_role = get_server_role_by_name(server_role_name=server_role_name, guild_id=ctx.guild.id)
+        server_role = bot.server_role_service.get_server_role_by_name(server_role_name=server_role_name, guild_id=ctx.guild.id)
         if server_role is not None: # The role exists in the DB, it means that somebody removed the role from the server manually
             # Update the server role
             server_role.id = discord_server_role.id
@@ -279,18 +313,6 @@ def main():
     except Exception as e:
         logging.critical(f"Fatal error: {e}", exc_info=True)
         raise
-
-# Bot configuration
-intents = discord.Intents.default()
-intents.members = True
-intents.message_content = True
-
-bot = commands.Bot(
-    command_prefix=os.environ.get("BOT_PREFIX", "!"),
-    description=description,
-    intents=intents,
-    help_command=None
-)
 
 if __name__ == "__main__":
     main()

@@ -33,11 +33,14 @@ class Game:
         voice_channel_team_two_id: Voice channel used for ingame for team two
         public_game_message_id: Message id where the summary of the game is setted
     """
+    # Required fields first
+    game_type: GameType
+    
+    # Optional fields with defaults
     id: Optional[int] = None
     guild_id: Optional[int] = None
     team_one_id: Optional[int] = None
     team_two_id: Optional[int] = None
-    game_type: GameType
     game_channel_id: int = 0
     admin_game_channel_id: int = 0
     voice_channel_team_one_id: int = 0
