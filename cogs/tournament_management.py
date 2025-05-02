@@ -196,18 +196,18 @@ class TournamentManagement(commands.Cog):
         
         return embed
 
-    async def _setup_game_channels(self, ctx, guild, category, team1, team2):
+    async def _setup_game_channels(self, ctx, guild, category, team_one, team_two):
         """Setup channels for a game with proper permissions"""
         try:
             # Get roles
             roles = {
                 "admin": discord.utils.get(guild.roles, name="Admin"),
-                "team1_captain": discord.utils.get(guild.roles, name=f"{team1['name']}_captain"),
-                "team1_coach": discord.utils.get(guild.roles, name=f"{team1['name']}_coach"),
-                "team1_player": discord.utils.get(guild.roles, name=f"{team1['name']}_player"),
-                "team2_captain": discord.utils.get(guild.roles, name=f"{team2['name']}_captain"),
-                "team2_coach": discord.utils.get(guild.roles, name=f"{team2['name']}_coach"),
-                "team2_player": discord.utils.get(guild.roles, name=f"{team2['name']}_player")
+                "team_one_captain": discord.utils.get(guild.roles, name=f"{team_one['name']}_captain"),
+                "team_one_coach": discord.utils.get(guild.roles, name=f"{team_one['name']}_coach"),
+                "team_one_player": discord.utils.get(guild.roles, name=f"{team_one['name']}_player"),
+                "team_two_captain": discord.utils.get(guild.roles, name=f"{team_two['name']}_captain"),
+                "team_two_coach": discord.utils.get(guild.roles, name=f"{team_two['name']}_coach"),
+                "team_two_player": discord.utils.get(guild.roles, name=f"{team_two['name']}_player")
             }
 
             # Validate roles exist
@@ -217,24 +217,24 @@ class TournamentManagement(commands.Cog):
                 await ctx.send(f"❌ Missing required roles: {', '.join(missing)}")
                 return None
 
-            channel_name = f"admin-{team1['name']}-vs-{team2['name']}"
+            channel_name = f"admin-{team_one['name']}-vs-{team_two['name']}"
             
             # Create admin channel
             admin_overwrites = {
                 guild.default_role: discord.PermissionOverwrite(read_messages=False),
                 guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True),
                 roles["admin"]: discord.PermissionOverwrite(read_messages=True, send_messages=True),
-                roles["team1_captain"]: discord.PermissionOverwrite(read_messages=True, send_messages=True),
-                roles["team1_coach"]: discord.PermissionOverwrite(read_messages=True, send_messages=False),
-                roles["team1_player"]: discord.PermissionOverwrite(read_messages=True, send_messages=False),
-                roles["team2_captain"]: discord.PermissionOverwrite(read_messages=True, send_messages=True),
-                roles["team2_coach"]: discord.PermissionOverwrite(read_messages=True, send_messages=False),
-                roles["team2_player"]: discord.PermissionOverwrite(read_messages=True, send_messages=False)
+                roles["team_one_captain"]: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+                roles["team_one_coach"]: discord.PermissionOverwrite(read_messages=True, send_messages=False),
+                roles["team_one_player"]: discord.PermissionOverwrite(read_messages=True, send_messages=False),
+                roles["team_two_captain"]: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+                roles["team_two_coach"]: discord.PermissionOverwrite(read_messages=True, send_messages=False),
+                roles["team_two_player"]: discord.PermissionOverwrite(read_messages=True, send_messages=False)
             }
             
             admin_channel = await category.create_text_channel(channel_name, overwrites=admin_overwrites)
-            await admin_channel.send(f"This channel will be used for communicating between org and teams on this game, remember that only admins and users with role {team1['name']}_captain and {team2['name']}_captain can write in this channel.")
-            await admin_channel.send(f"Time of picks and bans, {team1['name']} captain please send your veto with the command `!veto <mapname>`")
+            await admin_channel.send(f"This channel will be used for communicating between org and teams on this game, remember that only admins and users with role {team_one['name']}_captain and {team_two['name']}_captain can write in this channel.")
+            await admin_channel.send(f"Time of picks and bans, {team_one['name']} captain please send your veto with the command `!veto <mapname>`")
 
             # Create public channel
             public_overwrites = {
@@ -243,11 +243,11 @@ class TournamentManagement(commands.Cog):
                 roles["admin"]: discord.PermissionOverwrite(read_messages=True, send_messages=True)
             }
             
-            channel_name = f"{team1['name']}-vs-{team2['name']}"
+            channel_name = f"{team_one['name']}-vs-{team_two['name']}"
 
             public_channel = await category.create_text_channel(channel_name, overwrites=public_overwrites)
-            embed = discord.Embed(title=f"{team1['name']} vs {team2['name']} picks, bans and maps", color=discord.Color.blue())
-            embed.description = f"Game between {team1['name']} vs {team2['name']}.\n"
+            embed = discord.Embed(title=f"{team_one['name']} vs {team_two['name']} picks, bans and maps", color=discord.Color.blue())
+            embed.description = f"Game between {team_one['name']} vs {team_two['name']}.\n"
             msg = await public_channel.send(embed=embed)
 
             # Create voice channels
@@ -255,22 +255,22 @@ class TournamentManagement(commands.Cog):
                 guild.default_role: discord.PermissionOverwrite(connect=False),
                 guild.me: discord.PermissionOverwrite(connect=True, speak=True),
                 roles["admin"]: discord.PermissionOverwrite(connect=True, speak=True),
-                roles["team1_captain"]: discord.PermissionOverwrite(connect=True, speak=True),
-                roles["team1_coach"]: discord.PermissionOverwrite(connect=True, speak=True),
-                roles["team1_player"]: discord.PermissionOverwrite(connect=True, speak=True)
+                roles["team_one_captain"]: discord.PermissionOverwrite(connect=True, speak=True),
+                roles["team_one_coach"]: discord.PermissionOverwrite(connect=True, speak=True),
+                roles["team_one_player"]: discord.PermissionOverwrite(connect=True, speak=True)
             }
             
             voice2_overwrites = {
                 guild.default_role: discord.PermissionOverwrite(connect=False),
                 guild.me: discord.PermissionOverwrite(connect=True, speak=True),
                 roles["admin"]: discord.PermissionOverwrite(connect=True, speak=True),
-                roles["team2_captain"]: discord.PermissionOverwrite(connect=True, speak=True),
-                roles["team2_coach"]: discord.PermissionOverwrite(connect=True, speak=True),
-                roles["team2_player"]: discord.PermissionOverwrite(connect=True, speak=True)
+                roles["team_two_captain"]: discord.PermissionOverwrite(connect=True, speak=True),
+                roles["team_two_coach"]: discord.PermissionOverwrite(connect=True, speak=True),
+                roles["team_two_player"]: discord.PermissionOverwrite(connect=True, speak=True)
             }
             
-            voice1 = await category.create_voice_channel(team1['name'], overwrites=voice1_overwrites)
-            voice2 = await category.create_voice_channel(team2['name'], overwrites=voice2_overwrites)
+            voice1 = await category.create_voice_channel(team_one['name'], overwrites=voice1_overwrites)
+            voice2 = await category.create_voice_channel(team_two['name'], overwrites=voice2_overwrites)
 
             return {
                 "admin": admin_channel,
@@ -287,8 +287,8 @@ class TournamentManagement(commands.Cog):
 
     async def _create_game(self, ctx, game, category_name: str, game_type: str):
         """Create a new game between two teams"""
-        team1 = game[0]
-        team2 = game[1]
+        team_one = game[0]
+        team_two = game[1]
         guild = ctx.guild
 
         try:
@@ -304,15 +304,15 @@ class TournamentManagement(commands.Cog):
                 ((team_one_id = ? AND team_two_id = ?) OR 
                     (team_one_id = ? AND team_two_id = ?)) AND
                 game_type = ? AND guild_id = ?""",
-                (team1["id"], team2["id"], team2["id"], team1["id"], game_type, guild.id)
+                (team_one["id"], team_two["id"], team_two["id"], team_one["id"], game_type, guild.id)
             )
             
             if existing_game:
-                await ctx.send(f"❌ Game already exists between {team1['name']} and {team2['name']}!")
+                await ctx.send(f"❌ Game already exists between {team_one['name']} and {team_two['name']}!")
                 return
 
             # Create channels and get permissions setup
-            channels = await self._setup_game_channels(ctx, guild, game_category, team1, team2)
+            channels = await self._setup_game_channels(ctx, guild, game_category, team_one, team_two)
             if not channels:
                 return
             
@@ -321,11 +321,11 @@ class TournamentManagement(commands.Cog):
                 """INSERT INTO game (
                     team_one_id, team_two_id, winner_number, game_type,
                     admin_game_channel_id, game_channel_id,
-                    voice_channel_team1_id, voice_channel_team2_id, guild_id, 
+                    voice_channel_team_one_id, voice_channel_team_two_id, guild_id, 
                     public_game_message_id
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    team1["id"], team2["id"], -1, game_type,
+                    team_one["id"], team_two["id"], -1, game_type,
                     channels["admin"].id, channels["public"].id,
                     channels["voice1"].id, channels["voice2"].id,
                     guild.id, channels["public_game_message"].id
@@ -343,7 +343,7 @@ class TournamentManagement(commands.Cog):
             logger.info(f"EMBED: {embed}")
             await channels["public_game_message"].edit(embed=embed)
             
-            logger.info(f"Created game: {team1['name']} vs {team2['name']}")
+            logger.info(f"Created game: {team_one['name']} vs {team_two['name']}")
             
         except Exception as e:
             logger.error(f"Error creating game: {e}")
@@ -758,21 +758,21 @@ class TournamentManagement(commands.Cog):
 
             # Set team results into teams table
             game_type = game["game_type"]
-            team1_id = game["team_one_id"]
-            team2_id = game["team_two_id"]
+            team_one_id = game["team_one_id"]
+            team_two_id = game["team_two_id"]
 
             # get teams from the database
-            team1 = await self.bot.fetch_one(
+            team_one = await self.bot.fetch_one(
                 "SELECT * FROM team WHERE id = ? AND guild_id = ?", 
-                (team1_id, guild.id)
+                (team_one_id, guild.id)
             )
-            team2 = await self.bot.fetch_one(
+            team_two = await self.bot.fetch_one(
                 "SELECT * FROM team WHERE id = ? AND guild_id = ?", 
-                (team2_id, guild.id)
+                (team_two_id, guild.id)
             )
 
-            winner_team = team1 if winner == 1 else team2
-            looser_team = team2 if winner == 1 else team1
+            winner_team = team_one if winner == 1 else team_two
+            looser_team = team_two if winner == 1 else team_one
 
             # if game_type contains "swiss" then update the swiss_wins and swiss_losses columns
             if "swiss" in game_type:
@@ -941,14 +941,14 @@ class TournamentManagement(commands.Cog):
             await ctx.send(f"✅ Map finished! Winner: {winner_team['name']}")
             if finished:
             # Delete the voice channels
-                voice_channel_team1_name = team1["name"]
-                voice_channel_team1 = discord.utils.get(guild.voice_channels, name=voice_channel_team1_name)
-                if voice_channel_team1:
-                    await voice_channel_team1.delete()
-                voice_channel_team2_name = team2["name"]
-                voice_channel_team2 = discord.utils.get(guild.voice_channels, name=voice_channel_team2_name)
-                if voice_channel_team2:
-                    await voice_channel_team2.delete()
+                voice_channel_team_one_name = team_one["name"]
+                voice_channel_team_one = discord.utils.get(guild.voice_channels, name=voice_channel_team_one_name)
+                if voice_channel_team_one:
+                    await voice_channel_team_one.delete()
+                voice_channel_team_two_name = team_two["name"]
+                voice_channel_team_two = discord.utils.get(guild.voice_channels, name=voice_channel_team_two_name)
+                if voice_channel_team_two:
+                    await voice_channel_team_two.delete()
 
                 await ctx.send(f"✅ Game finished! Winner: {winner_team['name']}")
             
