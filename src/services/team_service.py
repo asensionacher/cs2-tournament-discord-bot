@@ -26,9 +26,32 @@ class TeamService:
         ).fetchone()
         return Team(*row) if row else None
 
-    def get_all_teams(self) -> List[Team]:
+    def get_all_teams(self, guild_id: int) -> List[Team]:
         """Fetch all teams"""
         return [
             Team(*row) 
-            for row in self.conn.execute("SELECT * FROM team")
+            for row in self.conn.execute("SELECT * FROM team WHERE guild_id = ?", (guild_id,))
         ]
+
+
+    def get_team_by_name(self, name: str, guild_id: int) -> Optional[Team]:
+        """Fetch a team by name for a guild id"""
+        row = self.conn.execute(
+            "SELECT * FROM team WHERE name = ? AND guild_id = ?", 
+            (name, guild_id)
+        ).fetchone()
+        return Team(*row) if row else None
+    
+
+    
+    def delete_team_by_id(self, id: int):
+        """Delete team by id"""
+        cursor = self.conn.execute(
+            """
+            DELETE FROM team 
+            where id = ?
+            """,
+            (id,)
+        )
+        self.conn.commit()
+        return

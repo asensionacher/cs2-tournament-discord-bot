@@ -26,7 +26,7 @@ class ChannelService:
         ).fetchone()
         return Channel(*row) if row else None
 
-    def get_channel_by_name(self, channel_name: str, guild_id: str) -> Optional[Channel]:
+    def get_channel_by_name(self, channel_name: str, guild_id: int) -> Optional[Channel]:
         """Fetch a channel by channel_name for a guild id"""
         row = self.conn.execute(
             "SELECT * FROM channel WHERE channel_name = ? AND guild_id = ?", 
@@ -34,14 +34,13 @@ class ChannelService:
         ).fetchone()
         return Channel(*row) if row else None
 
-    def get_all_categories(self, guild_id:str) -> List[Channel]:
-        """Fetch all categories for a guild"""
+    def get_all_channels(self, guild_id:str) -> List[Channel]:
+        """Fetch all channels for a guild"""
         return [
             Channel(*row) 
             for row in self.conn.execute("SELECT * FROM channel WHERE guild_id = ?",
                                          (guild_id,))
         ]
-    
     
     def update_channel(self, channel: Channel):
         """Update channel values"""

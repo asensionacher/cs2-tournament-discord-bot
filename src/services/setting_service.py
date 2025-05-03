@@ -41,3 +41,15 @@ class SettingService:
             for row in self.conn.execute("SELECT * FROM setting WHERE guild_id = ?",
                                          (guild_id,))
         ]
+    
+    def delete_all_settings(self, guild_id: int):
+        """Delete all settings of a guild"""
+        cursor = self.conn.execute(
+            """
+            DELETE FROM setting 
+            where guild_id = ?
+            """,
+            (guild_id,)
+        )
+        self.conn.commit()
+        return

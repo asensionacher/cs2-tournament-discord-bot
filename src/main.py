@@ -3,9 +3,11 @@ import logging
 from logging.handlers import RotatingFileHandler
 import datetime
 from dotenv import load_dotenv
+import random
 
 import discord
 from discord.ext import commands
+import re
 
 from services import DatabaseManager
 from models.team import Team
@@ -13,12 +15,14 @@ from models.setting import Setting
 from models.server_role import ServerRole
 from models.category import Category
 from models.channel import Channel
+from models.player import Player
 
 from services.team_service import TeamService
 from services.setting_service import SettingService
 from services.server_role_service import ServerRoleService
 from services.category_service import CategoryService
 from services.channel_service import ChannelService
+from services.player_service import PlayerService
 
 description = '''
 Bot for creating a Counter Strike Tournament with 16 teams,
@@ -46,7 +50,7 @@ async def on_ready():
 async def help(ctx):
     """Show help information based on user role"""
     guild = ctx.guild
-    admin_role = discord.utils.get(guild.roles, name="Admin")
+    admin_role = discord.utils.get(guild.roles, name="admin")
     
     if not admin_role:
         help_msg = ("🔧 **Initial Setup**\n"
@@ -87,11 +91,10 @@ async def help(ctx):
     
     try:
         await ctx.send(help_msg)
-        logger.info(f"Help message sent to {ctx.author.name}")
+        logging.info(f"Help message sent to {ctx.author.name}")
     except discord.errors.HTTPException as e:
-        logger.error(f"Failed to send help message: {e}")
+        logging.error(f"Failed to send help message: {e}")
         await ctx.send("❌ Error sending help message. Please check logs.")
-
 
 @bot.command()
 async def start(ctx):
@@ -103,6 +106,15 @@ async def start(ctx):
     guild = ctx.guild
     try:
         # No matter if already started, but roles should not be created twice.
+        
+        start_executed_setting = bot.setting_service.get_setting_by_name(
+            setting_key="start_executed", guild_id=guild.id)
+        
+        if start_executed_setting is not None:
+            admin_role = discord.utils.get(guild.roles, name="Admin")
+            if admin_role is not None:
+                await ctx.send("You must be an admin!")
+                return
         
         # If the admin server role don't exists, create it
         admin_role = await _create_server_role(ctx, "admin")
@@ -172,24 +184,157 @@ async def start(ctx):
             "start_executed": {"value": "true"}
         }
 
-        # TODO: Use an external 
         for key, config in settings.items():
             await _create_server_setting(ctx, key, config["value"])
 
-        bot.setting_service.create_setting(start_setting)
     except Exception as e:
         await ctx.send(f"Error during setup: {str(e)}")
         logging.error(f"Setup error: {e}", exc_info=True)
 
-@bot.command(description='For when you wanna settle the score some other way')
-async def choose(ctx, *choices: str):
-    """Chooses between multiple choices."""
-    await ctx.send(random.choice(choices))
+@bot.command()
+async def create_team(ctx, *name: str):
+    """Create a new team"""
+    guild = ctx.guild
+    admin_role = discord.utils.get(guild.roles, name="admin")
+    name = " ".join(name)
+    if admin_role is None:
+        await ctx.send("Only admins can execute this")
+        return
+    try:
+        await _create_team(ctx, name)
+    except Exception as e:
+        logging.error(f"Error creating team: {e}")
+        await ctx.send(f"❌ Error creating team: {e}")
 
 @bot.command()
-async def joined(ctx, member: discord.Member):
-    """Says when a member joined."""
-    await ctx.send(f'{member.name} joined {discord.utils.format_dt(member.joined_at)}')
+async def add_player(ctx, *values: str):
+    """
+    Adds a player with nickname, SteamID (numbers only), and role to a team.
+    Format: !add_player <team_name> <nickname> <steamid> <role_name>
+    - team_name: Multi-word (e.g., "Natus Vincere")
+    - nickname: Single word (e.g., "s1mple")
+    - steamid: Numbers only (e.g., "123456789")
+    - role_name: captain/player/coach
+    """
+    # Check for minimum required arguments
+    if len(values) < 4:
+        await ctx.send("❌ Format: !add_player <team_name> <nickname> <steamid> <role>")
+        return
+    guild = ctx.guild
+    admin_role = discord.utils.get(guild.roles, name="admin")
+
+    if admin_role is None:
+        await ctx.send("Only admins can execute this")
+        return
+    
+    *team_name_parts, nickname, steamid, role_name = values
+    team_name = " ".join(team_name_parts)  # Combine team name parts with spaces
+    role_name = role_name.lower()  # Normalize role to lowercase
+
+    try:
+        await _add_player(ctx, team_name=team_name, nickname=nickname, role_name=role_name, steamid=steamid)
+    except Exception as e:
+        logging.error(f"Error creating team: {e}")
+        await ctx.send(f"❌ Error creating team: {e}")
+
+@bot.command()
+async def delete_player(ctx, nickname: str):
+    """
+    Deletes a player with nickname.
+    Format: !add_player <nickname>
+    - nickname: Single word (e.g., "s1mple")
+    """
+    
+    guild = ctx.guild
+    admin_role = discord.utils.get(guild.roles, name="admin")
+
+    if admin_role is None:
+        await ctx.send("Only admins can execute this")
+        return
+
+    try:
+        await _delete_player(ctx, nickname=nickname)
+    except Exception as e:
+        logging.error(f"Error creating team: {e}")
+        await ctx.send(f"❌ Error creating team: {e}")
+
+
+@bot.command()
+async def delete_team(ctx, *name: str):
+    """Delete team"""
+    guild = ctx.guild
+    admin_role = discord.utils.get(guild.roles, name="admin")
+    name = " ".join(name)
+    if admin_role is None:
+        await ctx.send("Only admins can execute this")
+        return
+    try:
+        await _delete_team(ctx, name)
+    except Exception as e:
+        logging.error(f"Error creating team: {e}")
+        await ctx.send(f"❌ Error creating team: {e}")
+        
+@bot.command()
+async def create_teams(ctx, *names: str):
+    """Create a new team"""
+    guild = ctx.guild
+    admin_role = discord.utils.get(guild.roles, name="admin")
+    names = " ".join(names)
+    names_splitted = [name.strip() for name in names.split(",")]
+    if admin_role is None:
+        await ctx.send("Only admins can execute this")
+        return
+    try:
+        for name in names_splitted:
+            await _create_team(ctx, name=name)
+    except Exception as e:
+        logging.error(f"Error creating teams: {e}")
+        await ctx.send(f"❌ Error creating team: {e}")  
+
+@bot.command()
+async def all_teams_created(ctx):
+    """Starts the tournament"""
+    guild = ctx.guild
+    admin_role = discord.utils.get(guild.roles, name="admin")
+    if admin_role is None:
+        await ctx.send("Only admins can execute this")
+        return
+    try:
+        # TODO: Set a function for all kind of rounds depending on number of games
+        a="b"
+    except Exception as e:
+        logging.error(f"All teams created error: {e}")
+        await ctx.send(f"❌ All teams created error: {e}")  
+
+
+@bot.command()
+async def mock_teams(ctx):
+    """Create mock teams"""
+    guild = ctx.guild
+    admin_role = discord.utils.get(guild.roles, name="admin")
+    if admin_role is None:
+        await ctx.send("Only admins can execute this")
+        return
+    try:
+        teams = bot.team_service.get_all_teams(guild_id = guild.id)
+        for i in range(1, (17 - len(teams))):
+            team_name = f"TeamX{i}"
+            await _create_team(ctx, name=team_name)
+            players = [
+                (f"{team_name}captain", "captain"),
+                (f"{team_name}player1", "player"),
+                (f"{team_name}player2", "player"),
+                (f"{team_name}player3", "player"),
+                (f"{team_name}player4", "player"),
+                (f"{team_name}coach", "coach")
+            ]
+
+            for nickname, role in players:
+                steamid = str(random.randint(100000, 999999))
+                await _add_player(ctx, team_name=team_name, nickname=nickname, role_name=role, steamid=steamid)           
+    except Exception as e:
+        logging.error(f"Error creating teams: {e}")
+        await ctx.send(f"❌ Error creating team: {e}")  
 
 def setup_logging():
     """Configure logging with file rotation"""
@@ -217,12 +362,11 @@ def setup_logging():
     )
     
     # Silence noisy loggers
-    logging.getLogger('discord.http').setLevel(logging.WARNING)
+    logging.getLogger('discord.http').setLevel(logging.info)
 
 def setup_database():
     """Initialize database and attach to bot instance"""
     bot.db = DatabaseManager()
-    bot.team_service = TeamService(bot.db.get_connection())
     bot.setting_service = SettingService(bot.db.get_connection())
     bot.service_role_service = ServerRoleService(bot.db.get_connection())
     bot.team_service = TeamService(bot.db.get_connection())
@@ -230,7 +374,230 @@ def setup_database():
     bot.server_role_service = ServerRoleService(bot.db.get_connection())
     bot.category_service = CategoryService(bot.db.get_connection())
     bot.channel_service = ChannelService(bot.db.get_connection())
+    bot.player_service = PlayerService(bot.db.get_connection())
     logging.info("Database and services initialized")
+
+def _is_valid_team_name(name: str) -> bool:
+    """Allows alphanumeric + spaces, no symbols"""
+    return all(c.isalnum() or c.isspace() for c in name)
+
+async def _create_team(ctx, name:str) -> Team:
+    guild = ctx.guild
+    try:
+        if not _is_valid_team_name(name=name):
+            await ctx.send("Team names can only contain alphanumerics and spaces.")
+            return
+        teams_channel = bot.channel_service.get_channel_by_name(channel_name="teams", guild_id=guild.id)
+        if teams_channel is None:
+            await ctx.send("There is no teams channel, please use !start")
+            return
+
+        team = bot.team_service.get_team_by_name(name=name, guild_id = guild.id)
+        if team is not None:
+            await ctx.send(f"Team {name} already exists.")
+            return
+
+        discord_teams_channel = bot.get_channel(teams_channel.channel_id)
+        embed = await _create_team_embed(team_name=name, members=[])
+        msg = await discord_teams_channel.send(embed=embed)
+
+        team = Team(name=name, guild_id=guild.id, discord_message_id=msg.id)
+        logging.info(team.name)
+        team.id = bot.team_service.create_team(team=team)
+
+        logging.info(f"Team {name} created in guild {guild.name}")
+        await ctx.send(f"Created team {name}")
+
+        # Create roles
+        for role_type in ["captain", "player", "coach"]:
+            server_role_name = f"{name}_{role_type}"
+            discord_server_role = await guild.create_role(name=server_role_name, mentionable=True)
+            server_role = ServerRole(guild_id=ctx.guild.id, role_name=server_role_name, role_id= discord_server_role.id)
+            bot.server_role_service.create_server_role(server_role)
+        return team
+
+    except Exception as e:
+        logging.error(f"Error creating team: {e}")
+        await ctx.send(f"❌ Error creating team: {e}")
+        return None
+
+async def _add_player(ctx, team_name:str, nickname:str, role_name:str, steamid:str) -> Player:
+    guild = ctx.guild
+    # Validate player name (single word)
+    if " " in nickname:
+        await ctx.send("❌ Player name must be a single word!")
+        return None
+
+    # Validate role
+    valid_roles = {"captain", "player", "coach"}
+    if role_name not in valid_roles:
+        await ctx.send(f"❌ Invalid role! Must be one of: {', '.join(valid_roles)}")
+        return None
+    try:
+        teams_channel = bot.channel_service.get_channel_by_name(channel_name="teams", guild_id=guild.id)
+        if teams_channel is None:
+            await ctx.send("There is no teams channel, please use !start")
+            return
+        team = bot.team_service.get_team_by_name(name=team_name, guild_id = guild.id)
+        await ctx.send(f"Team: {team.name}")
+        if team is None:
+            return
+        player = bot.player_service.get_player_by_nickname(nickname=nickname, guild_id=guild.id)
+        if player is not None:
+            await ctx.send(f"Player {nickname} already exists with this name.")
+            return None
+        player = bot.player_service.get_player_by_steamid(steamid=steamid, guild_id=guild.id)
+        if player is not None:
+            await ctx.send(f"Player with steamid {steamid} already exists.")
+            return None
+        if not steamid.isdigit():
+            await ctx.send("❌ SteamID must contain only numbers (steamID64)!")
+            return None
+        players = bot.player_service.get_players_by_team_id(team_id=team.id)
+
+        if role_name == "captain":
+            await ctx.send(players)
+            count_captains = sum(1 for p in players if p.role_name == role_name)
+            await ctx.send(f"count_captains={count_captains }")
+            if count_captains >= 1:
+                await ctx.send("❌ Only one captain can be assigned.")
+                return None
+        elif role_name == "coach":
+            count_coaches = sum(1 for p in players if p.role_name == role_name)
+            if count_coaches >= 2:
+                await ctx.send("❌ Only two coaches can be assigned.")
+                return None
+        elif role_name == "player":
+            count_players = sum(1 for p in players if p.role_name == role_name)
+            if count_players >= 4:
+                await ctx.send("❌ Only four non-captain players can be assigned.")
+                return None
+        else:
+            await ctx.send("❌ Role must be \"captain\", \"coach\" or \"player\".")
+            return None
+    
+
+        player = Player(
+            guild_id=guild.id, 
+            team_id=team.id, 
+            nickname=nickname, 
+            steamid=steamid,
+            role_name=role_name)
+        player.id = bot.player_service.create_player(player)
+        await ctx.send(f"Player {nickname} with steamid {steamid} added as a {role_name} to team {team_name}")
+
+        players = bot.player_service.get_players_by_team_id(team_id=team.id)
+        discord_teams_channel = bot.get_channel(teams_channel.channel_id)
+        embed = await _create_team_embed(team_name=team_name, members=players)
+        discord_team_message = await discord_teams_channel.fetch_message(team.discord_message_id)
+        await discord_team_message.edit(embed=embed)
+        return player    
+    except Exception as e:
+        logging.error(f"Error adding player: {e}")
+        await ctx.send(f"❌ Error adding player: {e}")
+        return None
+
+async def _delete_player(ctx, nickname:str):
+    guild = ctx.guild
+    # Validate player name (single word)
+    if " " in nickname:
+        await ctx.send("❌ Player name must be a single word!")
+        return None
+
+    teams_channel = bot.channel_service.get_channel_by_name(channel_name="teams", guild_id=guild.id)
+    if teams_channel is None:
+        await ctx.send("There is no teams channel, please use !start")
+        return
+
+    player = bot.player_service.get_player_by_nickname(nickname=nickname, guild_id=guild.id)
+    if player is None:
+        await ctx.send(f"There is no player with nickname {nickname}")
+        return
+    
+
+
+    team = bot.team_service.get_team_by_id(team_id=player.team_id)
+    if team is None:
+        ctx.send(f"Player's team don't exists. Is weird.")
+        return
+    player.id = bot.player_service.delete_player_by_id(id=player.id)
+    await ctx.send(f"Player {nickname} deleted successfully.")
+
+    players = bot.player_service.get_players_by_team_id(team_id=team.id)
+    discord_teams_channel = bot.get_channel(teams_channel.channel_id)
+    embed = await _create_team_embed(team_name=team.name, members=players)
+    discord_team_message = await discord_teams_channel.fetch_message(team.discord_message_id)
+    await discord_team_message.edit(embed=embed)
+    return    
+
+async def _delete_team(ctx, name:str):
+    guild = ctx.guild
+    try:
+        if not _is_valid_team_name(name=name):
+            await ctx.send("Team names can only contain alphanumerics and spaces.")
+            return
+        teams_channel = bot.channel_service.get_channel_by_name(channel_name="teams", guild_id=guild.id)
+        if teams_channel is None:
+            await ctx.send("There is no teams channel, please use !start")
+            return
+        
+        team = bot.team_service.get_team_by_name(name=name, guild_id = guild.id)
+        if team is None:
+            await ctx.send(f"Team {name} doesn't exist.")
+            return
+
+        discord_teams_channel = bot.get_channel(teams_channel.channel_id)
+        discord_team_message = await discord_teams_channel.fetch_message(team.discord_message_id)
+        await discord_team_message.delete()
+
+        logging.info(team.name)
+        team.id = bot.team_service.delete_team_by_id(id=team.id)
+
+        logging.info(f"Team {name} deleted in guild {guild.name}")
+        await ctx.send(f"Deleted team {name}")
+
+    except Exception as e:
+        logging.error(f"Error creating team: {e}")
+        await ctx.send(f"❌ Error creating team: {e}")
+        
+async def _create_team_embed(team_name: str, members: list) -> discord.Embed:
+    """Creates an embed for team display with current members and status"""
+    embed = discord.Embed(title=f"Team {team_name}", color=discord.Color.blue())
+
+    if len(members) == 0:
+        embed.description = "_No players yet_"
+        return embed
+
+    # Sort members by role
+    captain = next((m for m in members if m.role_name == "captain"), None)
+    players = [m for m in members if m.role_name == "player"]
+    coaches = [m for m in members if m.role_name == "coach"]
+
+    # Add fields for each role
+    if captain:
+        embed.add_field(name="👑 Captain", value=f"・{captain.nickname}", inline=False)
+    if players:
+        embed.add_field(name="🧍 Players", value="\n".join(f"・{p.nickname}" for p in players), inline=False)
+    if coaches:
+        embed.add_field(name="🧠 Coaches", value="\n".join(f"・{c.nickname}" for c in coaches), inline=False)
+
+    # Calculate team status
+    count_captains = sum(m.role_name== "captain" for m in members)
+    count_coaches = sum(m.role_name== "coach" for m in members)
+    count_players = sum(m.role_name== "player" for m in members)
+
+    # Set description based on team status
+    description = []
+    if count_captains == 0:
+        description.append("_Missing one 👑captain._")
+    if count_coaches < 2:
+        description.append("_Optionally two 🧠coaches can be added._")
+    if count_players < 5:
+        description.append("_Five players (including captain) are needed._")
+    
+    embed.description = "\n".join(description) if description else "_The team is complete._"
+    
+    return embed
 
 async def _create_server_category(ctx, category_name:str, category_position:int, overwrites) -> discord.CategoryChannel:
     """
@@ -300,11 +667,26 @@ async def _create_server_role(ctx, server_role_name: str) -> discord.Role:
             server_role = ServerRole(guild_id=ctx.guild.id, role_name=server_role_name, role_id= discord_server_role.id)
     return discord_server_role
 
+async def _create_server_setting(ctx, key:str, value:str) -> Setting:
+    """
+    Create a server setting if it don't exists
+    """
+    guild = ctx.guild
+    setting = bot.setting_service.get_setting_by_name(guild_id=guild.id, setting_key=key)
+
+    if setting is not None:
+        return setting
+    else:
+        setting = Setting(guild_id=guild.id, key=key, value=value)
+        setting.id = bot.setting_service.create_setting(setting=setting)
+    return setting
+
 def main():
     try:
         logging.info("Starting bot initialization...")
         
         load_dotenv()
+        logging.info(f"TOKEN: {os.environ['DISCORD_BOT_TOKEN']}")
         setup_database()
         
         bot.run(os.environ["DISCORD_BOT_TOKEN"])

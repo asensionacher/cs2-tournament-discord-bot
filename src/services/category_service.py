@@ -26,7 +26,7 @@ class CategoryService:
         ).fetchone()
         return Category(*row) if row else None
 
-    def get_category_by_name(self, category_name: str, guild_id: str) -> Optional[Category]:
+    def get_category_by_name(self, category_name: str, guild_id: int) -> Optional[Category]:
         """Fetch a category by category_name for a guild id"""
         row = self.conn.execute(
             "SELECT * FROM category WHERE category_name = ? AND guild_id = ?", 
