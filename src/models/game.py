@@ -41,8 +41,8 @@ class Game:
     guild_id: Optional[int] = None
     team_one_id: Optional[int] = None
     team_two_id: Optional[int] = None
-    game_channel_id: int = 0
-    admin_game_channel_id: int = 0
-    voice_channel_team_one_id: int = 0
-    voice_channel_team_two_id: int = 0
-    public_game_message_id: int = 0
+    game_channel_id: Optional[int] = None
+    admin_game_channel_id: Optional[int] = None
+    voice_channel_team_one_id: Optional[int] = None
+    voice_channel_team_two_id: Optional[int] = None
+    public_game_message_id: Optional[int] = None

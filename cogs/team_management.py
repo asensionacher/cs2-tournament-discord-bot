@@ -69,7 +69,6 @@ class TeamManagement(commands.Cog):
         msg = await teams_channel.fetch_message(msg.id)
         await msg.edit(embed=embed)
 
-
     async def _create_team_embed(self, team_name: str, members: list) -> discord.Embed:
         """Creates an embed for team display with current members and status"""
         embed = discord.Embed(title=f"Team {team_name}", color=discord.Color.blue())

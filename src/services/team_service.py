@@ -33,7 +33,6 @@ class TeamService:
             for row in self.conn.execute("SELECT * FROM team WHERE guild_id = ?", (guild_id,))
         ]
 
-
     def get_team_by_name(self, name: str, guild_id: int) -> Optional[Team]:
         """Fetch a team by name for a guild id"""
         row = self.conn.execute(
@@ -43,6 +42,45 @@ class TeamService:
         return Team(*row) if row else None
     
 
+    def get_teams_by_record(self, guild_id: int, wins: int, losses: int) -> List[Team]:
+        """Fetch all teams by type"""
+        return [
+            Team(*row) 
+            for row in self.conn.execute("SELECT * FROM team WHERE guild_id = ? AND swiss_wins == ? AND swiss_losses = ?", 
+                                        (guild_id, wins, losses))
+        ]
+
+    def get_teams_quaterfinalist(self, guild_id: int, ) -> List[Team]:
+        """Fetch all teams by type"""
+        return [
+            Team(*row) 
+            for row in self.conn.execute("SELECT * FROM team WHERE guild_id = ? AND is_quaterfinalist == ? ", 
+                                        (guild_id, True))
+        ]
+
+    def get_teams_semifinalist(self, guild_id: int, ) -> List[Team]:
+        """Fetch all teams by type"""
+        return [
+            Team(*row) 
+            for row in self.conn.execute("SELECT * FROM team WHERE guild_id = ? AND is_semifinalist == ? ", 
+                                        (guild_id, True))
+        ]
+
+    def get_teams_finalist(self, guild_id: int, ) -> List[Team]:
+        """Fetch all teams by type"""
+        return [
+            Team(*row) 
+            for row in self.conn.execute("SELECT * FROM team WHERE guild_id = ? AND is_finalist == ? ", 
+                                        (guild_id, True))
+        ]
+
+    def get_teams_third_place(self, guild_id: int, ) -> List[Team]:
+        """Fetch all teams by type"""
+        return [
+            Team(*row) 
+            for row in self.conn.execute("SELECT * FROM team WHERE guild_id = ? AND is_third_place == ? ", 
+                                        (guild_id, True))
+        ]
     
     def delete_team_by_id(self, id: int):
         """Delete team by id"""

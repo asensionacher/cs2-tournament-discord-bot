@@ -2,8 +2,14 @@ CREATE TABLE IF NOT EXISTS team (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     discord_message_id INTEGER,
-    guild_id INTEGER
-);
+    swiss_wins INTEGER DEFAULT 0,
+    swiss_losses INTEGER DEFAULT 0,
+    guild_id INTEGER,
+    is_quaterfinalist BOOLEAN DEFAULT FALSE,
+    is_semifinalist BOOLEAN DEFAULT FALSE,
+    is_finalist BOOLEAN DEFAULT FALSE,
+    is_third_place BOOLEAN DEFAULT FALSE
+    );
 
 CREATE TABLE IF NOT EXISTS player (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -27,6 +33,7 @@ CREATE TABLE IF NOT EXISTS game (
     guild_id INTEGER,
     team_one_id INTEGER,
     team_two_id INTEGER,
+    team_winner INTEGER DEFAULT -1,
     game_type TEXT CHECK(game_type IN ('swiss_1', 'swiss_2', 'swiss_3', 'swiss_4', 'swiss_5',
      'quarterfinal', 'semifinal', 'final', 'third_place')) NOT NULL,
     game_channel_id INTEGER NOT NULL,
