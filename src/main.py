@@ -779,24 +779,26 @@ async def _set_new_round(ctx):
     """
     guild = ctx.guild
     all_games_finished = bot.game_service.get_all_games_finished(guild_id=guild.id)
+    all_games = bot.game_service.get_all_games(guild_id=guild.id)
     number_of_games_finished = len(all_games_finished)
+    number_of_games = len(all_games)
     
     game_type = ""
-    if number_of_games_finished == 0: # First round of swiss (swiss_1)
+    if number_of_games_finished == 0 and number_of_games == 0: # First round of swiss (swiss_1)
         game_types = ["swiss_1"]
-    elif number_of_games_finished == 8: # Second round of swiss (swiss_2)
+    elif number_of_games_finished == 8 and number_of_games == 8: # Second round of swiss (swiss_2)
         game_types = ["swiss_2"]
-    elif number_of_games_finished == 16: # Third round of swiss (swiss_3)
+    elif number_of_games_finished == 16 and number_of_games == 16: # Third round of swiss (swiss_3)
         game_types = ["swiss_3"]
-    elif number_of_games_finished == 24: # Fourth round of swiss (swiss_4)
+    elif number_of_games_finished == 24 and number_of_games == 24: # Fourth round of swiss (swiss_4)
         game_types = ["swiss_4"]
-    elif number_of_games_finished == 30: # Firth round of swiss (swiss_5)
+    elif number_of_games_finished == 30 and number_of_games == 30: # Firth round of swiss (swiss_5)
         game_types = ["swiss_5"]
-    elif number_of_games_finished == 33: # First knockout round (quaterfinal)
+    elif number_of_games_finished == 33 and number_of_games == 33: # First knockout round (quaterfinal)
         game_types = ["quaterfinal"]
-    elif number_of_games_finished == 37: # Second knockout round (semifinal)
+    elif number_of_games_finished == 37 and number_of_games == 37: # Second knockout round (semifinal)
         game_types = ["semifinal"]
-    elif number_of_games_finished == 39: # Third knockout round (third_place and final)
+    elif number_of_games_finished == 39 and number_of_games == 39: # Third knockout round (third_place and final)
         game_types = ["third_place", "final"]
     else:
         return
