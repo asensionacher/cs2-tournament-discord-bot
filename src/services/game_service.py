@@ -46,6 +46,13 @@ class GameService:
             for row in self.conn.execute("SELECT * FROM game WHERE guild_id = ? AND team_winner > 0", (guild_id,))
         ]
 
+    def get_all_games_not_finished(self, guild_id: int) -> List[Game]:
+        """Fetch all games"""
+        return [
+            Game(*row) 
+            for row in self.conn.execute("SELECT * FROM game WHERE guild_id = ? AND team_winner <= 0", (guild_id,))
+        ]
+
     def get_game_by_teams_and_type(self, team_one_id: int, team_two_id:int, 
                                    game_type: str, guild_id: int) -> Optional[Game]:
         """Fetch a game by teams and type for a guild id"""
@@ -93,17 +100,17 @@ class GameService:
     
     def update_game(self, game: Game):
         """Update an existing game"""
-        cursor = self.conn.execute(
+        self.conn.execute(
             """
             UPDATE game SET guild_id = ?, team_one_id = ?, team_two_id = ?, 
             game_type = ?, game_channel_id = ?, admin_game_channel_id = ?,
             voice_channel_team_one_id = ?, voice_channel_team_two_id = ?,
-            public_game_message_id = ?
+            public_game_message_id = ?, team_winner = ?
             WHERE id = ?
             """,
             (game.guild_id, game.team_one_id, game.team_two_id,
              game.game_type, game.game_channel_id, game.admin_game_channel_id,
              game.voice_channel_team_one_id, game.voice_channel_team_two_id, 
-             game.public_game_message_id, game.id)
+             game.public_game_message_id, game.team_winner, game.id)
         )
         self.conn.commit()

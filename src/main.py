@@ -187,11 +187,11 @@ async def start(ctx):
         for name, config in channels.items():            
             await _create_text_channel(ctx, channel_name=name, overwrites=config["overwrites"], category=config["category"])
         settings = {
-            "swiss_not_to_three_wins": {"value": "bo3"},
+            "swiss_not_to_three_wins": {"value": "bo1"},
             "swiss_to_three_wins": {"value": "bo3"},
             "quarterfinal_rounds": {"value": "bo3"},
             "semifinal_rounds": {"value": "bo3"},
-            "final_rounds": {"value": "bo3"},
+            "final_rounds": {"value": "bo5"},
             "third_place_rounds": {"value": "bo3"},
             "start_executed": {"value": "true"}
         }
@@ -445,9 +445,66 @@ async def finish_round(ctx):
         await ctx.send("Must be executed from admin channel")
         return
     else:
-        # TODO: Check if works
-        _set_new_round(ctx)
+        await _set_new_round(ctx)
 
+@bot.command()
+@discord.ext.commands.has_role("admin")
+async def autoveto(ctx):
+    guild = ctx.guild
+    if not ctx.channel.name == "admin":
+        await ctx.send("Must be executed from admin channel")
+        return
+    else:
+        games = bot.game_service.get_all_games_not_finished(guild_id=guild.id)
+        await ctx.send(f"games_len = {len(games)}")
+        for game in games:
+            game_to_wins = (await _get_game_to_wins(ctx, game=game)).value
+            await ctx.send(f"autoveto0-{game_to_wins}")
+            if game_to_wins == "bo1":
+                await ctx.send(f"autoveto1-{game_to_wins}")
+                await _execute_veto(ctx, game=game, map_name="anubis", game_to_wins=game_to_wins)
+                await _execute_veto(ctx, game=game, map_name="train", game_to_wins=game_to_wins)
+                await _execute_veto(ctx, game=game, map_name="inferno", game_to_wins=game_to_wins)
+                await _execute_veto(ctx, game=game, map_name="mirage", game_to_wins=game_to_wins)
+                await _execute_veto(ctx, game=game, map_name="nuke", game_to_wins=game_to_wins)
+                await _execute_veto(ctx, game=game, map_name="ancient", game_to_wins=game_to_wins)
+            elif game_to_wins == "bo3":
+                await ctx.send(f"autoveto2-{game_to_wins}")
+                await _execute_veto(ctx, game=game, map_name="anubis", game_to_wins=game_to_wins)
+                await _execute_veto(ctx, game=game, map_name="train", game_to_wins=game_to_wins)
+                await _execute_pick(ctx, game=game, map_name="inferno", game_to_wins=game_to_wins)
+                await _execute_pick(ctx, game=game, map_name="mirage", game_to_wins=game_to_wins)
+                await _execute_veto(ctx, game=game, map_name="nuke", game_to_wins=game_to_wins)
+                await _execute_veto(ctx, game=game, map_name="ancient", game_to_wins=game_to_wins)
+            elif game_to_wins == "bo5":
+                await ctx.send(f"autoveto3-{game_to_wins}")
+                await _execute_veto(ctx, game=game, map_name="anubis", game_to_wins=game_to_wins)
+                await _execute_veto(ctx, game=game, map_name="train", game_to_wins=game_to_wins)
+                await _execute_pick(ctx, game=game, map_name="inferno", game_to_wins=game_to_wins)
+                await _execute_pick(ctx, game=game, map_name="mirage", game_to_wins=game_to_wins)
+                await _execute_pick(ctx, game=game, map_name="nuke", game_to_wins=game_to_wins)
+                await _execute_pick(ctx, game=game, map_name="ancient", game_to_wins=game_to_wins)
+            
+@bot.command()
+@discord.ext.commands.has_role("admin")
+async def autoresults(ctx):
+    guild = ctx.guild
+    if not ctx.channel.name == "admin":
+        await ctx.send("Must be executed from admin channel")
+        return
+    else:
+        games = bot.game_service.get_all_games_not_finished(guild_id=guild.id)
+        for game in games:
+            game_to_wins = (await _get_game_to_wins(ctx, game=game)).value
+            if game_to_wins == "bo1":
+                await _set_result(ctx, game=game, team_number=1, map_name="dust2")
+            elif game_to_wins == "bo3":
+                await _set_result(ctx, game=game, team_number=1, map_name="inferno")
+                await _set_result(ctx, game=game, team_number=1, map_name="mirage")
+            elif game_to_wins == "bo5":
+                await _set_result(ctx, game=game, team_number=1, map_name="inferno")
+                await _set_result(ctx, game=game, team_number=1, map_name="mirage")
+                await _set_result(ctx, game=game, team_number=1, map_name="nuke")
 
 def setup_logging():
     """Configure logging with file rotation"""
@@ -483,7 +540,6 @@ def setup_database():
     bot.setting_service = SettingService(bot.db.get_connection())
     bot.service_role_service = ServerRoleService(bot.db.get_connection())
     bot.team_service = TeamService(bot.db.get_connection())
-    bot.setting_service = SettingService(bot.db.get_connection())
     bot.server_role_service = ServerRoleService(bot.db.get_connection())
     bot.category_service = CategoryService(bot.db.get_connection())
     bot.channel_service = ChannelService(bot.db.get_connection())
@@ -919,27 +975,27 @@ async def _create_games(ctx, game_type: str):
         games += await _random_games(ctx, teams=teams, game_type=game_type)
         game_category_name = "Swiss stage round 1"
     if game_type == "swiss_2":
-        teams = bot.team_service.get_teams_by_record(wins=1,losses=0)
+        teams = bot.team_service.get_teams_by_record(guild_id=guild.id, wins=1,losses=0)
         games += await _random_games(ctx, teams=teams, game_type=game_type)
-        teams = bot.team_service.get_teams_by_record(wins=0,losses=1)
+        teams = bot.team_service.get_teams_by_record(guild_id=guild.id, wins=0,losses=1)
         games += await _random_games(ctx, teams=teams, game_type=game_type)
         game_category_name = "Swiss stage round 2"
     if game_type == "swiss_3":
-        teams = bot.team_service.get_teams_by_record(wins=2,losses=0)
+        teams = bot.team_service.get_teams_by_record(guild_id=guild.id, wins=2,losses=0)
         games += await _random_games(ctx, teams=teams, game_type=game_type)
-        teams = bot.team_service.get_teams_by_record(wins=1,losses=1)
+        teams = bot.team_service.get_teams_by_record(guild_id=guild.id, wins=1,losses=1)
         games += await _random_games(ctx, teams=teams, game_type=game_type)
-        teams = bot.team_service.get_teams_by_record(wins=0,losses=2)
+        teams = bot.team_service.get_teams_by_record(guild_id=guild.id, wins=0,losses=2)
         games += await _random_games(ctx, teams=teams, game_type=game_type)
         game_category_name = "Swiss stage round 3"
     if game_type == "swiss_4":
-        teams = bot.team_service.get_teams_by_record(wins=2,losses=1)
+        teams = bot.team_service.get_teams_by_record(guild_id=guild.id, wins=2,losses=1)
         games += await _random_games(ctx, teams=teams, game_type=game_type)
-        teams = bot.team_service.get_teams_by_record(wins=1,losses=2)
+        teams = bot.team_service.get_teams_by_record(guild_id=guild.id, wins=1,losses=2)
         games += await _random_games(ctx, teams=teams, game_type=game_type)
         game_category_name = "Swiss stage round 4"
     if game_type == "swiss_5":
-        teams = bot.team_service.get_teams_by_record(wins=2,losses=2)
+        teams = bot.team_service.get_teams_by_record(guild_id=guild.id, wins=2,losses=2)
         games += await _random_games(ctx, teams=teams, game_type=game_type)
         game_category_name = "Swiss stage round 5"        
     if game_type == "quaterfinal":
@@ -1241,12 +1297,17 @@ async def _game_summary(ctx, game: Game):
             await ctx.send(f"⚠️ Pick added but failed to update display: {e}")
 
 async def _set_result(ctx, game: Game, team_number: int, map_name: str):
+    if game.team_winner > 0:
+        await ctx.send("The winner have been already setted.")
+        return
     team_one = bot.team_service.get_team_by_id(game.team_one_id)
     team_two = bot.team_service.get_team_by_id(game.team_two_id)
     guild = ctx.guild
     if team_number == 1:
         team_winner = team_one
+        team_looser = team_two
     elif team_number == 2:
+        team_looser = team_one
         team_winner = team_two
     else:
         await ctx.send(f"Winner must be set as 1 if winner is {team_one.name} or 2 if winner is {team_two.name}.")
@@ -1264,11 +1325,9 @@ async def _set_result(ctx, game: Game, team_number: int, map_name: str):
     team_one_wins = 0
     team_two_wins = 0
     for game_map in game_maps:
-        if game_map.team_id_winner <= 0:
-            return
         if game_map.team_id_winner == team_one.id:
             team_one_wins = team_one_wins + 1
-        else:
+        elif game_map.team_id_winner == team_two.id:
             team_two_wins = team_two_wins + 1
     
     await ctx.send(f"team_one_wins={team_one_wins} - team_two_wins = {team_two_wins}")
@@ -1297,7 +1356,19 @@ async def _set_result(ctx, game: Game, team_number: int, map_name: str):
         await ctx.send(f"The winner of the game is {game_winner.name}.")
         game.team_winner = game_winner.id
         bot.game_service.update_game(game=game)
-    
+        await _game_summary(ctx, game)
+        team_winner.swiss_wins = team_winner.swiss_wins + 1
+        team_looser.swiss_losses = team_looser.swiss_losses + 1
+        bot.team_service.update_team(team_winner)
+        bot.team_service.update_team(team_looser)
+        voice_channel_team_one_name = team_one.name
+        voice_channel_team_one = discord.utils.get(guild.voice_channels, name=voice_channel_team_one_name)
+        if voice_channel_team_one:
+            await voice_channel_team_one.delete()
+        voice_channel_team_two_name = team_two.name
+        voice_channel_team_two = discord.utils.get(guild.voice_channels, name=voice_channel_team_two_name)
+        if voice_channel_team_two:
+            await voice_channel_team_two.delete()
 
 def main():
     try:

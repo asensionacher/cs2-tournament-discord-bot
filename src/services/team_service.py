@@ -93,3 +93,20 @@ class TeamService:
         )
         self.conn.commit()
         return
+
+    def update_team(self, team: Team):
+        """Update an existing team"""
+        self.conn.execute(
+            """
+            UPDATE team 
+            SET name = ?, discord_message_id = ?, swiss_wins = ?,
+                swiss_losses = ?, guild_id = ?, is_quaterfinalist = ?,
+                is_semifinalist = ?, is_finalist = ?, is_third_place = ?
+            WHERE id = ?
+            """,
+            (team.name, team.discord_message_id, team.swiss_wins,
+             team.swiss_losses, team.guild_id, team.is_quaterfinalist,
+             team.is_semifinalist, team.is_finalist, team.is_third_place,
+             team.id)
+        )
+        self.conn.commit()
