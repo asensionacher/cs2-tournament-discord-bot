@@ -15,3 +15,5 @@ class GameMap:
     game_id: int = 0
     team_id_winner: int = 0
     guild_id: int = 0
+    game_number: int = 0
+    map_name: str = ""

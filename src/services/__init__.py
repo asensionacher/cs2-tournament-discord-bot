@@ -9,4 +9,6 @@ from services.game_service import GameService
 from services.veto_service import VetoService
 from services.pick_service import PickService
 
-__all__ = ['DatabaseManager', 'PlayerService', 'TeamService', 'ServerRoleService', 'SettingService', 'CategoryService', 'ChannelService', 'GameService', 'VetoService', "PickService"]  # Control what's exposed
+__all__ = ['DatabaseManager', 'PlayerService', 'TeamService', 'ServerRoleService', 
+'SettingService', 'CategoryService', 'ChannelService', 'GameService', 'VetoService', 
+"PickService", "GameMapService"]  # Control what's exposed

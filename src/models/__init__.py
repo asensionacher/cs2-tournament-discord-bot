@@ -14,4 +14,5 @@ from models.veto import Veto
 from models.channel import Channel
 from models.setting import Setting
 
-__all__ = ['Category', 'GameMap', 'Game', 'Pick', 'Player', 'ServerRole', 'Team', 'Veto', 'Channel', 'Setting' ]  # Explicit exports
+__all__ = ['Category', 'GameMap', 'Game', 'Pick', 'Player', 
+'ServerRole', 'Team', 'Veto', 'Channel', 'Setting' ]  # Explicit exports

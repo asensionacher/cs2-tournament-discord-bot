@@ -1,6 +1,6 @@
 from typing import List, Optional
 from sqlite3 import Connection
-from models.game import Game, GameType
+from models.game import Game
 
 class GameService:
     def __init__(self, conn: Connection):
@@ -17,7 +17,7 @@ class GameService:
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (game.guild_id, game.team_one_id, game.team_two_id,
-             game.game_type.value, game.game_channel_id, game.admin_game_channel_id,
+             game.game_type, game.game_channel_id, game.admin_game_channel_id,
              game.voice_channel_team_one_id, game.voice_channel_team_two_id, 
              game.public_game_message_id)
         )
@@ -43,11 +43,11 @@ class GameService:
         """Fetch all games"""
         return [
             Game(*row) 
-            for row in self.conn.execute("SELECT * FROM game WHERE guild_id = ? AND team_winner > -1", (guild_id,))
+            for row in self.conn.execute("SELECT * FROM game WHERE guild_id = ? AND team_winner > 0", (guild_id,))
         ]
 
     def get_game_by_teams_and_type(self, team_one_id: int, team_two_id:int, 
-                                   game_type: GameType, guild_id: int) -> Optional[Game]:
+                                   game_type: str, guild_id: int) -> Optional[Game]:
         """Fetch a game by teams and type for a guild id"""
         row = self.conn.execute(
             """
@@ -56,27 +56,27 @@ class GameService:
             AND game_type = ?
             AND guild_id = ?
             """, 
-            (team_one_id, team_two_id, team_two_id, team_one_id, game_type.value, guild_id)
+            (team_one_id, team_two_id, team_two_id, team_one_id, game_type, guild_id)
         ).fetchone()
         return Game(*row) if row else None
     
     def get_game_by_admin_game_channel_id(self, admin_game_channel_id: int) -> Optional[Game]:
-        """Fetch a game by teams and type for a guild id"""
+        """Fetch a game by admin game channel ID"""
         row = self.conn.execute(
             """
-            SELECT * FROM game WHERE team_one_id = ? 
-            AND admin_game_channel_id = ?
+            SELECT * FROM game WHERE admin_game_channel_id = ?
             """, 
             (admin_game_channel_id,)
         ).fetchone()
+        print(f"row -> {row}")
         return Game(*row) if row else None
 
-    def get_all_games_by_type(self, guild_id: int, game_type: GameType) -> List[Game]:
+    def get_all_games_by_type(self, guild_id: int, game_type: str) -> List[Game]:
         """Fetch all games by type"""
         return [
             Game(*row) 
             for row in self.conn.execute("SELECT * FROM game WHERE guild_id = ? AND game_type == ?", 
-                                        (guild_id, game_type.value))
+                                        (guild_id, game_type))
         ]    
 
     def delete_game_by_id(self, id: int):
@@ -90,3 +90,20 @@ class GameService:
         )
         self.conn.commit()
         return
+    
+    def update_game(self, game: Game):
+        """Update an existing game"""
+        cursor = self.conn.execute(
+            """
+            UPDATE game SET guild_id = ?, team_one_id = ?, team_two_id = ?, 
+            game_type = ?, game_channel_id = ?, admin_game_channel_id = ?,
+            voice_channel_team_one_id = ?, voice_channel_team_two_id = ?,
+            public_game_message_id = ?
+            WHERE id = ?
+            """,
+            (game.guild_id, game.team_one_id, game.team_two_id,
+             game.game_type, game.game_channel_id, game.admin_game_channel_id,
+             game.voice_channel_team_one_id, game.voice_channel_team_two_id, 
+             game.public_game_message_id, game.id)
+        )
+        self.conn.commit()

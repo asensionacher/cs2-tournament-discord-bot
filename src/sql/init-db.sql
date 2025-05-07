@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS game_map (
     team_id_winner INTEGER NOT NULL,
     guild_id INTEGER NOT NULL,
     game_number INTEGER NOT NULL,   
+    map_name TEXT NOT NULL,
     FOREIGN KEY (game_id) REFERENCES game(id) ON DELETE CASCADE,
     FOREIGN KEY (team_id_winner) REFERENCES team(id) ON DELETE CASCADE
 );

@@ -1,6 +1,6 @@
 from typing import List, Optional
 from sqlite3 import Connection
-from models.veto import Veto, VetoType
+from models.veto import Veto
 
 class VetoService:
     def __init__(self, conn: Connection):

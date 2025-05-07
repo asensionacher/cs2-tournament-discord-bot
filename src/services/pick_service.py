@@ -1,6 +1,6 @@
 from typing import List, Optional
 from sqlite3 import Connection
-from models.pick import Pick, PickType
+from models.pick import Pick
 
 class PickService:
     def __init__(self, conn: Connection):
@@ -20,18 +20,29 @@ class PickService:
         self.conn.commit()
         return cursor.lastrowid
 
-    def get_all_pickes(self, guild_id: int) -> List[Pick]:
-        """Fetch all pickes"""
+    def get_all_picks(self, guild_id: int) -> List[Pick]:
+        """Fetch all picks"""
         return [
             Pick(*row) 
             for row in self.conn.execute("SELECT * FROM pick WHERE guild_id = ?", (guild_id,))
         ]
 
-    def get_all_pickes_by_game(self, guild_id: int, game_id: int) -> List[Pick]:
-        """Fetch all pickes by game id"""
+    def get_all_picks_by_game(self, guild_id: int, game_id: int) -> List[Pick]:
+        """Fetch all picks by game id"""
         return [
             Pick(*row) 
             for row in self.conn.execute("SELECT * FROM pick WHERE guild_id = ? AND game_id = ?", 
+                                         (guild_id, game_id))
+        ]
+    def get_all_picks_by_game_ordered(self, guild_id: int, game_id: int) -> List[Pick]:
+        """Fetch all picks by game id ordered by order_pick ASC"""
+        return [
+            Pick(*row) 
+            for row in self.conn.execute("""
+                                        SELECT * FROM pick 
+                                        WHERE guild_id = ? AND game_id = ?
+                                        ORDER BY order_pick ASC
+                                        """, 
                                          (guild_id, game_id))
         ]
 
