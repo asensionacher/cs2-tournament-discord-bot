@@ -1095,6 +1095,7 @@ async def _games_summary(ctx):
                         team_one_name = f"{team_two}✅"
 
                 text += f"・{team_one_name} {team_one_wins}:{team_two_wins} {team_two_name}\n"
+            print(text)
             embed.add_field(name=title, value=text, inline=False)
             await ctx.send(embed=embed)
     # Do it in the right place
