@@ -1032,10 +1032,6 @@ async def _create_games(ctx, game_type: str):
 
 async def _games_summary(ctx):
     guild = ctx.guild
-    title = "Summary of games in the tournament."
-    embed = discord.Embed(title=title, color=discord.Color.blue())
-    description = "Here will appear all games played at the tournament."
-    embed.description = description
     game_rounds = [
         {"swiss_1", "Swiss round 1 (0 Wins, 0 Losses)"},
         {"swiss_2_high", "Swiss round 2 high (1 Win, 0 Losses)"},
@@ -1052,6 +1048,11 @@ async def _games_summary(ctx):
         {"final", "Final"}
     ] 
     for game_round, title in game_rounds:
+        
+        title = "Summary of games in the tournament."
+        embed = discord.Embed(title=title, color=discord.Color.blue())
+        description = "Here will appear all games played at the tournament."
+        embed.description = description
         games = bot.game_service.get_games_by_type(game_type=game_round, guild_id=guild.id)
         if len(games) > 0:
             text = ""
@@ -1095,8 +1096,8 @@ async def _games_summary(ctx):
 
                 text += f"・{team_one_name} {team_one_wins}:{team_two_wins} {team_two_name}\n"
             embed.add_field(name=title, value=text, inline=False)
+            await ctx.send(embed=embed)
     # Do it in the right place
-    await ctx.send(embed=embed)
 
 
 async def _check_all_teams(ctx) -> bool:
