@@ -53,6 +53,13 @@ class GameService:
             for row in self.conn.execute("SELECT * FROM game WHERE guild_id = ? AND team_winner <= 0", (guild_id,))
         ]
 
+    def get_games_by_type(self, game_type: str, guild_id: int) -> List[Game]:
+        """Fetch games by type for a guild id"""
+        return [
+            Game(*row) 
+            for row in self.conn.execute("SELECT * FROM game WHERE game_type = ?  AND guild_id = ?", (game_type, guild_id))
+        ]
+
     def get_game_by_teams_and_type(self, team_one_id: int, team_two_id:int, 
                                    game_type: str, guild_id: int) -> Optional[Game]:
         """Fetch a game by teams and type for a guild id"""

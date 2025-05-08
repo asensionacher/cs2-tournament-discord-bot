@@ -12,7 +12,7 @@ class Team:
     swiss_wins: int = 0
     swiss_losses: int = 0
     guild_id: Optional[int] = None
-    is_quaterfinalist: bool = False
+    is_quarterfinalist: bool = False
     is_semifinalist: bool = False
     is_finalist: bool = False
     is_third_place: bool = False

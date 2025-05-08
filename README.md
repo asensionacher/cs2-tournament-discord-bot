@@ -9,7 +9,7 @@ The features of the bot are:
 - Team management: Create and remove teams and players.
 - Major-like tournament automatically created.
   - [Swiss-system elimination stage](https://en.wikipedia.org/wiki/Swiss-system_tournament).
-  - Elimination stage (Quaterfinal, Semifinal, Third-place and Final).
+  - Elimination stage (quarterfinal, Semifinal, Third-place and Final).
 - Auto creation of games.
 - Map pick and bans system.
 - Creation of all necessary Discrod roles, text channels and voice channels.
@@ -18,7 +18,7 @@ The features of the bot are:
 
 This bot is in a very early stage, so keep in mind that bugs and missing features exists:
 
-- [ ] Only `bo3` system. Planned to have a way to set it between `bo1`, `bo3` and `bo5` for each game type (swiss round 1, swiss round 2, swiss round 3, swiss round 4, swiss round 5, quaterfinal, semifinal, third place and final).
+- [ ] Only `bo3` system. Planned to have a way to set it between `bo1`, `bo3` and `bo5` for each game type (swiss round 1, swiss round 2, swiss round 3, swiss round 4, swiss round 5, quarterfinal, semifinal, third place and final).
 - [ ] Code is now a mess. I'm not a developer, but a code refactor is desired.
 - [ ] Adding a `league-system` instead of `swiss-system` before elimination stage. 
 - [ ] Adding more teams, now only 16 teams can be added.
@@ -65,5 +65,5 @@ For using the bot, you have to do:
 4. Execute from `Admin` channel `!all_teams_created`. The channels on `Swiss stage round 1` will be randomly created the games. For each game, an admin channel and a public channel are created. On the game-admin channel only the captains can write and is used for picks & bans, but you can also use it for internal game communication between teams and org. The idea is to have also public-game-channel to show information about the match.
 5. On each game, the captain of each team have to send vetoes and picks. Send `!veto dust2` for vetoing dust2 or `!pick inferno` for picking inferno. Once all vetoes and picks are selected, decider will be automatically selected.
 6. Once all games are finished, automatically new games will be created, respecting the current streak of each team.
-7. Once the swiss-stage is finished, Quaterfinal will be created. The same for the rest of elimination stage.
+7. Once the swiss-stage is finished, quarterfinal will be created. The same for the rest of elimination stage.
 

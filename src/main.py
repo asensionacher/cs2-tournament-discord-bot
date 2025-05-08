@@ -20,6 +20,7 @@ from models.game import Game
 from models.veto import Veto
 from models.pick import Pick
 from models.game_map import GameMap
+from models.summary import Summary
 
 from services.team_service import TeamService
 from services.setting_service import SettingService
@@ -31,6 +32,7 @@ from services.game_service import GameService
 from services.veto_service import VetoService
 from services.pick_service import PickService
 from services.game_map_service import GameMapService
+from services.summary_service import SummaryService
 
 description = '''
 Bot for creating a Counter Strike Tournament with 16 teams,
@@ -506,6 +508,11 @@ async def autoresults(ctx):
                 await _set_result(ctx, game=game, team_number=1, map_name="mirage")
                 await _set_result(ctx, game=game, team_number=1, map_name="nuke")
 
+@bot.command()
+@discord.ext.commands.has_role("admin")
+async def tournamentsummary(ctx):
+    await _games_summary(ctx)
+
 def setup_logging():
     """Configure logging with file rotation"""
     os.makedirs('logs', exist_ok=True)
@@ -549,6 +556,7 @@ def setup_database():
     bot.veto_service = VetoService(bot.db.get_connection())
     bot.pick_service = PickService(bot.db.get_connection())
     bot.game_map_service = GameMapService(bot.db.get_connection())
+    bot.summary_service = SummaryService(bot.db.get_connection())
     logging.info("Database and services initialized")
 
 def _is_valid_team_name(name: str) -> bool:
@@ -850,8 +858,8 @@ async def _set_new_round(ctx):
         game_types = ["swiss_4"]
     elif number_of_games_finished == 30 and number_of_games == 30: # Firth round of swiss (swiss_5)
         game_types = ["swiss_5"]
-    elif number_of_games_finished == 33 and number_of_games == 33: # First knockout round (quaterfinal)
-        game_types = ["quaterfinal"]
+    elif number_of_games_finished == 33 and number_of_games == 33: # First knockout round (quarterfinal)
+        game_types = ["quarterfinal"]
     elif number_of_games_finished == 37 and number_of_games == 37: # Second knockout round (semifinal)
         game_types = ["semifinal"]
     elif number_of_games_finished == 39 and number_of_games == 39: # Third knockout round (third_place and final)
@@ -918,6 +926,7 @@ async def _create_game(ctx, game: Game, category: discord.CategoryChannel):
     }
 
     admin_channel_name = f"ADMINS {team_one.name} vs {team_two.name}"
+    await ctx.send(category)
     admin_channel = await _create_text_channel(ctx, channel_name=admin_channel_name, overwrites=admin_overwrites, category=category)
     await admin_channel.send(f"This channel will be used for communicating between org and teams on this game, remember that only admins and users with role {team_one.name}_captain and {team_two.name}_captain can write in this channel.")
     await admin_channel.send(f"Time of picks and bans, {team_one.name} captain please send your veto with the command `!veto <mapname>`")
@@ -976,42 +985,42 @@ async def _create_games(ctx, game_type: str):
         game_category_name = "Swiss stage round 1"
     if game_type == "swiss_2":
         teams = bot.team_service.get_teams_by_record(guild_id=guild.id, wins=1,losses=0)
-        games += await _random_games(ctx, teams=teams, game_type=game_type)
+        games += await _random_games(ctx, teams=teams, game_type=f"{game_type}_high")
         teams = bot.team_service.get_teams_by_record(guild_id=guild.id, wins=0,losses=1)
-        games += await _random_games(ctx, teams=teams, game_type=game_type)
+        games += await _random_games(ctx, teams=teams, game_type=f"{game_type}_low")
         game_category_name = "Swiss stage round 2"
     if game_type == "swiss_3":
         teams = bot.team_service.get_teams_by_record(guild_id=guild.id, wins=2,losses=0)
-        games += await _random_games(ctx, teams=teams, game_type=game_type)
+        games += await _random_games(ctx, teams=teams, game_type=f"{game_type}_high")
         teams = bot.team_service.get_teams_by_record(guild_id=guild.id, wins=1,losses=1)
-        games += await _random_games(ctx, teams=teams, game_type=game_type)
+        games += await _random_games(ctx, teams=teams, game_type=f"{game_type}_mid")
         teams = bot.team_service.get_teams_by_record(guild_id=guild.id, wins=0,losses=2)
-        games += await _random_games(ctx, teams=teams, game_type=game_type)
+        games += await _random_games(ctx, teams=teams, game_type=f"{game_type}_low")
         game_category_name = "Swiss stage round 3"
     if game_type == "swiss_4":
         teams = bot.team_service.get_teams_by_record(guild_id=guild.id, wins=2,losses=1)
-        games += await _random_games(ctx, teams=teams, game_type=game_type)
+        games += await _random_games(ctx, teams=teams, game_type=f"{game_type}_high")
         teams = bot.team_service.get_teams_by_record(guild_id=guild.id, wins=1,losses=2)
-        games += await _random_games(ctx, teams=teams, game_type=game_type)
+        games += await _random_games(ctx, teams=teams, game_type=f"{game_type}_low")
         game_category_name = "Swiss stage round 4"
     if game_type == "swiss_5":
         teams = bot.team_service.get_teams_by_record(guild_id=guild.id, wins=2,losses=2)
         games += await _random_games(ctx, teams=teams, game_type=game_type)
         game_category_name = "Swiss stage round 5"        
-    if game_type == "quaterfinal":
-        teams = bot.team_service.get_teams_quaterfinalist()
+    if game_type == "quarterfinal":
+        teams = bot.team_service.get_teams_quarterfinalist(guild_id=guild.id)
         games += await _random_games(ctx, teams=teams, game_type=game_type)
-        game_category_name = "Quaterfinals"        
+        game_category_name = "Quarterfinals"       
     if game_type == "semifinal":
-        teams = bot.team_service.get_teams_semifinalist()
+        teams = bot.team_service.get_teams_semifinalist(guild_id=guild.id)
         games += await _random_games(ctx, teams=teams, game_type=game_type)
         game_category_name = "Semifinals"
     if game_type == "final":
-        teams = bot.team_service.get_teams_finalist()
+        teams = bot.team_service.get_teams_finalist(guild_id=guild.id)
         games += await _random_games(ctx, teams=teams, game_type=game_type)
         game_category_name = "Final"
     if game_type == "third_place":
-        teams = bot.team_service.get_teams_third_place()
+        teams = bot.team_service.get_teams_third_place(guild_id=guild.id)
         games += await _random_games(ctx, teams=teams, game_type=game_type)
         game_category_name = "Third Place"
     
@@ -1019,6 +1028,76 @@ async def _create_games(ctx, game_type: str):
     for game in games:
         await ctx.send(f"Creating game {game}")
         await _create_game(ctx, game, category=discord_game_category)
+    await _games_summary(ctx)
+
+async def _games_summary(ctx):
+    guild = ctx.guild
+    title = "Summary of games in the tournament."
+    embed = discord.Embed(title=title, color=discord.Color.blue())
+    description = "Here will appear all games played at the tournament."
+    embed.description = description
+    game_rounds = [
+        {"swiss_1", "Swiss round 1 (0 Wins, 0 Losses)"},
+        {"swiss_2_high", "Swiss round 2 high (1 Win, 0 Losses)"},
+        {"swiss_2_low", "Swiss round 2 low (0 Wins, 1 Loss)"},
+        {"swiss_3_high", "Swiss round 3 high (2 Wins, 0 Losses)"},
+        {"swiss_3_mid", "Swiss round 3 mid (1 Win, 1 Loss)"},
+        {"swiss_3_low", "Swiss round 3 low (0 Wins, 2 Losses)"},
+        {"swiss_4_high", "Swiss round 4 high (2 Wins, 1 Losses)"},
+        {"swiss_4_low", "Swiss round 4 low (1 Win, 2 Losses)"},
+        {"swiss_5", "Swiss round 2 high (2 Wins, 2 Losses)"},
+        {"quarterfinal", "Quarter-final"},
+        {"semifinal", "Semi-final"},
+        {"third_place", "Third place"},
+        {"final", "Final"}
+    ] 
+    for game_round, title in game_rounds:
+        games = bot.game_service.get_games_by_type(game_type=game_round, guild_id=guild.id)
+        if len(games) > 0:
+            text = ""
+            for game in games:
+                team_one = bot.team_service.get_team_by_id(team_id=game.team_one_id)
+                team_two = bot.team_service.get_team_by_id(team_id=game.team_two_id)
+                team_one_name = team_one.name
+                team_two_name = team_two.name
+                game_maps = bot.game_map_service.get_all_game_maps_by_game(guild_id=guild.id, game_id=game.id)
+                team_one_wins = 0
+                team_two_wins = 0
+                for game_map in game_maps:
+                    if game_map.team_id_winner == team_one.id:
+                        team_one_wins = team_one_wins + 1
+                    elif game_map.team_id_winner == team_two.id:
+                        team_two_wins = team_two_wins + 1
+                games_to_wins = await _get_game_to_wins(ctx, game)
+                game_winner = None
+                if games_to_wins.value == "bo1":
+                    if team_one_wins >= 1:
+                        team_one_name = f"✅{team_one}"
+                        team_one_name = f"{team_two}❌"
+                    elif team_two_wins >= 1:
+                        team_one_name = f"❌{team_one}"
+                        team_one_name = f"{team_two}✅"
+                elif games_to_wins.value == "bo3":
+                    await ctx.send("is bo3")
+                    if team_one_wins >= 2:
+                        team_one_name = f"✅{team_one}"
+                        team_one_name = f"{team_two}❌"
+                    elif team_two_wins >= 2:
+                        team_one_name = f"❌{team_one}"
+                        team_one_name = f"{team_two}✅"
+                elif games_to_wins.value == "bo5":
+                    if team_one_wins >= 3:
+                        team_one_name = f"✅{team_one}"
+                        team_one_name = f"{team_two}❌"
+                    elif team_two_wins >= 3:
+                        team_one_name = f"❌{team_one}"
+                        team_one_name = f"{team_two}✅"
+
+                text += f"・{team_one_name} {team_one_wins}:{team_two_wins} {team_two_name}\n"
+            embed.add_field(name=title, value=text, inline=False)
+    # Do it in the right place
+    await ctx.send(embed=embed)
+
 
 async def _check_all_teams(ctx) -> bool:
     """
@@ -1045,16 +1124,9 @@ async def _get_game_to_wins(ctx, game: Game) -> str:
     guild = ctx.guild
     game_type = game.game_type
     key = ""
-    if game_type == "swiss_1" or game_type == "swiss_2":
+    if game_type == "swiss_1" or game_type == "swiss_2_high" or game_type == "swiss_2_low" or game_type == "swiss_3_low":
         key = "swiss_not_to_three_wins"
-    elif game_type == "swiss_3":
-        team_one = bot.team_service.get_team_by_id(game.team_one_id)
-        team_two = bot.team_service.get_team_by_id(game.team_two_id)
-        if team_one.swiss_wins == 2 or team_one.swiss_losses == 2 or team_two.swiss_wins == 2 or team_two.swiss_losses == 2:
-            key = "swiss_to_three_wins"
-        else:
-            key = "swiss_not_to_three_wins"
-    elif game_type == "swiss_4" or game_type == "swiss_5":
+    elif game_type == "swiss_3_high" or game_type == "swiss_4_high" or game_type == "swiss_4_low" or game_type == "swiss_5":
         key = "swiss_to_three_wins"
     else:
         key = f"{game_type}_rounds"
@@ -1112,7 +1184,7 @@ async def _execute_veto(ctx, game: Game, game_to_wins:str, map_name:str):
         elif all_order + 1 < 6:
             await ctx.send(f"{next_team.name} time to veto.")
     elif game_to_wins == "bo5":
-        if all_order + 1 >= 2:
+        if all_order + 1 > 2:
             await ctx.send(f"Is pick time!")
             return
         await ctx.send(f"{team_one.name} vetoed {map_name}")
@@ -1357,10 +1429,20 @@ async def _set_result(ctx, game: Game, team_number: int, map_name: str):
         game.team_winner = game_winner.id
         bot.game_service.update_game(game=game)
         await _game_summary(ctx, game)
-        team_winner.swiss_wins = team_winner.swiss_wins + 1
-        team_looser.swiss_losses = team_looser.swiss_losses + 1
+        if "swiss_" in game.game_type:
+            team_winner.swiss_wins = team_winner.swiss_wins + 1
+            team_looser.swiss_losses = team_looser.swiss_losses + 1
+            if team_winner.swiss_wins >= 3:
+                team_winner.is_quarterfinalist = True
+        if game.game_type == "quarterfinal":
+            team_winner.is_semifinalist = True
+        if game.game_type == "semifinal":
+            team_winner.is_finalist = True
+            team_looser.is_third_place = True
+
         bot.team_service.update_team(team_winner)
         bot.team_service.update_team(team_looser)
+        
         voice_channel_team_one_name = team_one.name
         voice_channel_team_one = discord.utils.get(guild.voice_channels, name=voice_channel_team_one_name)
         if voice_channel_team_one:

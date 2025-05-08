@@ -50,11 +50,11 @@ class TeamService:
                                         (guild_id, wins, losses))
         ]
 
-    def get_teams_quaterfinalist(self, guild_id: int, ) -> List[Team]:
+    def get_teams_quarterfinalist(self, guild_id: int, ) -> List[Team]:
         """Fetch all teams by type"""
         return [
             Team(*row) 
-            for row in self.conn.execute("SELECT * FROM team WHERE guild_id = ? AND is_quaterfinalist == ? ", 
+            for row in self.conn.execute("SELECT * FROM team WHERE guild_id = ? AND is_quarterfinalist == ? ", 
                                         (guild_id, True))
         ]
 
@@ -100,12 +100,12 @@ class TeamService:
             """
             UPDATE team 
             SET name = ?, discord_message_id = ?, swiss_wins = ?,
-                swiss_losses = ?, guild_id = ?, is_quaterfinalist = ?,
+                swiss_losses = ?, guild_id = ?, is_quarterfinalist = ?,
                 is_semifinalist = ?, is_finalist = ?, is_third_place = ?
             WHERE id = ?
             """,
             (team.name, team.discord_message_id, team.swiss_wins,
-             team.swiss_losses, team.guild_id, team.is_quaterfinalist,
+             team.swiss_losses, team.guild_id, team.is_quarterfinalist,
              team.is_semifinalist, team.is_finalist, team.is_third_place,
              team.id)
         )

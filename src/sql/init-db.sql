@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS team (
     swiss_wins INTEGER DEFAULT 0,
     swiss_losses INTEGER DEFAULT 0,
     guild_id INTEGER,
-    is_quaterfinalist BOOLEAN DEFAULT FALSE,
+    is_quarterfinalist BOOLEAN DEFAULT FALSE,
     is_semifinalist BOOLEAN DEFAULT FALSE,
     is_finalist BOOLEAN DEFAULT FALSE,
     is_third_place BOOLEAN DEFAULT FALSE
@@ -34,8 +34,9 @@ CREATE TABLE IF NOT EXISTS game (
     team_one_id INTEGER,
     team_two_id INTEGER,
     team_winner INTEGER DEFAULT -1,
-    game_type TEXT CHECK(game_type IN ('swiss_1', 'swiss_2', 'swiss_3', 'swiss_4', 'swiss_5',
-     'quarterfinal', 'semifinal', 'final', 'third_place')) NOT NULL,
+    game_type TEXT CHECK(game_type IN ('swiss_1', 'swiss_2_high', 'swiss_2_low', 'swiss_3_high','swiss_3_mid','swiss_3_low', 
+        'swiss_4_high', 'swiss_4_low', 'swiss_5',
+        'quarterfinal', 'semifinal', 'final', 'third_place')) NOT NULL,
     game_channel_id INTEGER NOT NULL,
     admin_game_channel_id INTEGER NOT NULL,
     voice_channel_team_one_id INTEGER NOT NULL,
@@ -98,3 +99,11 @@ CREATE TABLE IF NOT EXISTS setting (
     key TEXT NOT NULL,
     value TEXT NOT NULL
 );
+
+-- CREATE TABLE IF NOT EXISTS summary (
+--     id INTEGER PRIMARY KEY AUTOINCREMENT,
+--     guild_id INTEGER NOT NULL,
+--     round TEXT CHECK(round IN ('swiss_1', 'swiss_2_high', 'swiss_2_low', 'swiss_3_high','swiss_3_mid','swiss_3_low', 'swiss_4_high', 'swiss_4_low', 'swiss_5',
+--      'quarterfinal', 'semifinal', 'final', 'third_place')) NOT NULL,
+--     public_game_message_id INTEGER NOT NULL,
+-- );
