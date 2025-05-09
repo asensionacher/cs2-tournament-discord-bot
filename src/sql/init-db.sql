@@ -100,10 +100,10 @@ CREATE TABLE IF NOT EXISTS setting (
     value TEXT NOT NULL
 );
 
--- CREATE TABLE IF NOT EXISTS summary (
---     id INTEGER PRIMARY KEY AUTOINCREMENT,
---     guild_id INTEGER NOT NULL,
---     round TEXT CHECK(round IN ('swiss_1', 'swiss_2_high', 'swiss_2_low', 'swiss_3_high','swiss_3_mid','swiss_3_low', 'swiss_4_high', 'swiss_4_low', 'swiss_5',
---      'quarterfinal', 'semifinal', 'final', 'third_place')) NOT NULL,
---     public_game_message_id INTEGER NOT NULL,
--- );
+CREATE TABLE IF NOT EXISTS summary (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id INTEGER NOT NULL,
+    round_name TEXT CHECK(round_name IN ('swiss_1', 'swiss_2_high', 'swiss_2_low', 'swiss_3_high','swiss_3_mid','swiss_3_low', 'swiss_4_high', 'swiss_4_low', 'swiss_5',
+     'quarterfinal', 'semifinal', 'final', 'third_place')) NOT NULL,
+    message_id INTEGER NOT NULL
+);

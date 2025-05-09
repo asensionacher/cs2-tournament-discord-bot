@@ -439,6 +439,7 @@ async def result(ctx, map_name: str, team_number: int):
         return
     await _set_result(ctx, game=game, team_number=team_number, map_name=map_name)
     await _game_summary(ctx, game=game)
+    await _games_summary(ctx)
     
 @bot.command()
 @discord.ext.commands.has_role("admin")
@@ -1033,26 +1034,24 @@ async def _create_games(ctx, game_type: str):
 async def _games_summary(ctx):
     guild = ctx.guild
     game_rounds = [
-        {"swiss_1", "Swiss round 1 (0 Wins, 0 Losses)"},
-        {"swiss_2_high", "Swiss round 2 high (1 Win, 0 Losses)"},
-        {"swiss_2_low", "Swiss round 2 low (0 Wins, 1 Loss)"},
-        {"swiss_3_high", "Swiss round 3 high (2 Wins, 0 Losses)"},
-        {"swiss_3_mid", "Swiss round 3 mid (1 Win, 1 Loss)"},
-        {"swiss_3_low", "Swiss round 3 low (0 Wins, 2 Losses)"},
-        {"swiss_4_high", "Swiss round 4 high (2 Wins, 1 Losses)"},
-        {"swiss_4_low", "Swiss round 4 low (1 Win, 2 Losses)"},
-        {"swiss_5", "Swiss round 2 high (2 Wins, 2 Losses)"},
-        {"quarterfinal", "Quarter-final"},
-        {"semifinal", "Semi-final"},
-        {"third_place", "Third place"},
-        {"final", "Final"}
+        ("swiss_1", "Swiss round 1 (0 Wins, 0 Losses)"),
+        ("swiss_2_high", "Swiss round 2 high (1 Win, 0 Losses)"),
+        ("swiss_2_low", "Swiss round 2 low (0 Wins, 1 Loss)"),
+        ("swiss_3_high", "Swiss round 3 high (2 Wins, 0 Losses)"),
+        ("swiss_3_mid", "Swiss round 3 mid (1 Win, 1 Loss)"),
+        ("swiss_3_low", "Swiss round 3 low (0 Wins, 2 Losses)"),
+        ("swiss_4_high", "Swiss round 4 high (2 Wins, 1 Losses)"),
+        ("swiss_4_low", "Swiss round 4 low (1 Win, 2 Losses)"),
+        ("swiss_5", "Swiss round 2 high (2 Wins, 2 Losses)"),
+        ("quarterfinal", "Quarter-final"),
+        ("semifinal", "Semi-final"),
+        ("third_place", "Third place"),
+        ("final", "Final")
     ] 
+    discord_info_category = discord.utils.get(guild.categories, name="Info")
+    discord_summary_channel = discord.utils.get(guild.text_channels, name="summary", category=discord_info_category)
     for game_round, title in game_rounds:
-        
-        title = "Summary of games in the tournament."
         embed = discord.Embed(title=title, color=discord.Color.blue())
-        description = "Here will appear all games played at the tournament."
-        embed.description = description
         games = bot.game_service.get_games_by_type(game_type=game_round, guild_id=guild.id)
         if len(games) > 0:
             text = ""
@@ -1094,11 +1093,17 @@ async def _games_summary(ctx):
                         team_two_name = f"{team_two_name}✅"
 
                 text += f"・{team_one_name} {team_one_wins}:{team_two_wins} {team_two_name}\n"
-            print(text)
-            embed.add_field(name=title, value=text, inline=False)
-            await ctx.send(embed=embed)
-    # Do it in the right place
-
+            
+            embed.add_field(name="Games", value=text, inline=False)
+            summary = bot.summary_service.get_summary_by_round_name(guild_id=guild.id, round_name=game_round)
+            if summary is None:
+                msg = await discord_summary_channel.send(embed=embed)
+                summary = Summary(guild_id= guild.id, round_name=game_round, message_id=msg.id)
+                bot.summary_service.create_summary(summary=summary)
+            else:
+                msg = await discord_summary_channel.fetch_message(summary.message_id)
+                await ctx.send(msg.id)
+                await msg.edit(embed=embed)
 
 async def _check_all_teams(ctx) -> bool:
     """
@@ -1125,12 +1130,13 @@ async def _get_game_to_wins(ctx, game: Game) -> str:
     guild = ctx.guild
     game_type = game.game_type
     key = ""
-    if game_type == "swiss_1" or game_type == "swiss_2_high" or game_type == "swiss_2_low" or game_type == "swiss_3_low":
+    if game_type == "swiss_1" or game_type == "swiss_2_high" or game_type == "swiss_2_low" or game_type == "swiss_3_low" or game_type == "swiss_3_mid":
         key = "swiss_not_to_three_wins"
     elif game_type == "swiss_3_high" or game_type == "swiss_4_high" or game_type == "swiss_4_low" or game_type == "swiss_5":
         key = "swiss_to_three_wins"
     else:
         key = f"{game_type}_rounds"
+    await ctx.send(f"game_type = {game_type}, key = {key}")
     return bot.setting_service.get_setting_by_name(guild_id=guild.id, setting_key=key)
 
 async def _execute_veto(ctx, game: Game, game_to_wins:str, map_name:str):

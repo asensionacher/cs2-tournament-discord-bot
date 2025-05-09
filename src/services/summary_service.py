@@ -10,10 +10,10 @@ class SummaryService:
         """Insert a new summary, returns summary ID"""
         cursor = self.conn.execute(
             """
-            INSERT INTO summary (guild_id, round, public_game_message_id)
+            INSERT INTO summary (guild_id, round_name, message_id)
             VALUES (?, ?, ?)
             """,
-            (summary.guild_id, summary.round, summary.public_game_message_id)
+            (summary.guild_id, summary.round_name, summary.message_id)
         )
         self.conn.commit()
         return cursor.lastrowid
@@ -25,13 +25,11 @@ class SummaryService:
             for row in self.conn.execute("SELECT * FROM summary WHERE guild_id = ?", (guild_id,))
         ]
 
-    def get_all_summaries_by_round(self, guild_id: int, round: str) -> List[Summary]:
-        """Fetch all summaries by game id"""
-        return [
-            Summary(*row) 
-            for row in self.conn.execute("SELECT * FROM summary WHERE guild_id = ? AND round = ?", 
-                                         (guild_id, round))
-        ]
+    def get_summary_by_round_name(self, guild_id: int, round_name: str) -> Optional[Summary]:
+        """Fetch all summaries by game id and round_name"""
+        row = self.conn.execute("SELECT * FROM summary WHERE guild_id = ? AND round_name = ?", 
+                                (guild_id, round_name)).fetchone()
+        return Summary(*row) if row else None
 
     def delete_summary_by_id(self, id: int):
         """Delete summary by id"""

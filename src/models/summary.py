@@ -7,5 +7,6 @@ class Summary:
     Summary of tournament summaries
     """
     id: Optional[int] = None
-    round: Optional[str] = None
-    public_game_message_id: Optional[int] = None
+    guild_id: Optional[int] = None
+    round_name: Optional[str] = None
+    message_id: Optional[int] = None
