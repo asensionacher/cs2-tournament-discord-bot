@@ -65,7 +65,6 @@ async def on_ready():
 async def help(ctx):
     """Show help information based on user role"""
     guild = ctx.guild
-    admin_role = discord.utils.get(guild.roles, name="admin")
     
     if not admin_role:
         help_msg = ("🔧 **Initial Setup**\n"
@@ -80,28 +79,34 @@ async def help(ctx):
 
     help_msg = (
         "🎮 **CS2 Tournament Bot Help**\n\n"
-        "⚠️ Please use the #admin channel for all commands!\n\n"
+        "⚠️ Please use the #admin channel for all admin commands!\n\n"
+        
+        "**Initial Setup:**\n"
+        "• `!start` - Initialize server setup (roles, categories, channels)\n\n"
+        
         "**Team Management:**\n"
         "• `!create_team <teamname>` - Create a new team\n"
+        "• `!create_teams <team1,team2,...>` - Create multiple teams\n"
         "• `!add_player <teamname> <nickname> <steamid> <role>` - Add player to team\n"
         "  Roles can be: captain/coach/player\n"
-        "• `!delete_team <teamname>` - Delete team and its players\n"
-        "• `!remove_player <teamname> <nickname>` - Remove player from team\n\n"
+        "• `!delete_team <teamname>` - Delete team\n"
+        "• `!delete_player <nickname>` - Delete player\n\n"
         
         "**Tournament Flow:**\n"
-        "• `!mock_teams` - Create 16 test teams (for testing only)\n"
         "• `!all_teams_created` - Lock teams and start tournament\n"
-        "  ⚠️ After this command, teams cannot be modified!\n\n"
+        "• `!finish_round` - Complete current round and start next\n"
+        "• `!tournamentsummary` - Show tournament progress\n\n"
         
-        "**Round Management:**\n"
-        "• `!result <team_number>` - Set the result of the current map of a game.\n" 
-        "  ⚠️ This command should be executed in the public game channel.\n"
-        "  ⚠️ Winner should be 1 or 2 (team number)\n"
-        "• `!veto <map_name>` - Veto a map in the current game.\n"
-        "  ⚠️ This command should be executed in the public game channel.\n"
-        "  ⚠️ Only the captain of the team can veto a map.\n"
-        "• `!pick <map_name>` - Pick a map in the current game.\n"
-        "  ⚠️ Only the captain of the team can pick a map.\n\n"
+        "**Game Management:**\n"
+        "• `!veto <map_name>` - Veto a map (execute in game channel)\n"
+        "• `!pick <map_name>` - Pick a map (execute in game channel)\n"
+        "• `!result <map_name> <team_number>` - Set map winner (1 or 2)\n"
+        "• `!summary` - Show game status\n\n"
+
+        "**Admin Testing:**\n"
+        "• `!mock_teams` - Create 16 test teams with players\n"
+        "• `!autoveto` - Auto execute vetos for all games\n"
+        "• `!autoresults` - Auto set results for all games\n"
     )
     
     try:
@@ -116,6 +121,7 @@ async def start(ctx):
     """
     Initialize the server setup.
     It creates all categories, channels and settings.
+    Format: !start
     """
     guild = ctx.guild
     try:
@@ -124,7 +130,6 @@ async def start(ctx):
             setting_key="start_executed", guild_id=guild.id)
         
         if start_executed_setting is not None:
-            admin_role = discord.utils.get(guild.roles, name="admin")
             if admin_role is not None:
                 await ctx.send("You must be an admin!")
                 return
@@ -176,7 +181,6 @@ async def start(ctx):
             discord_categories[name] = {
                 "category": category
             }
-        await ctx.send(f"Categories {discord_categories}")
         
         # Create object of channels
 
@@ -208,13 +212,16 @@ async def start(ctx):
 @bot.command()
 @discord.ext.commands.has_role("admin")
 async def create_team(ctx, *name: str):
-    """Create a new team"""
-    guild = ctx.guild
-    admin_role = discord.utils.get(guild.roles, name="admin")
+    """
+    Create a new team
+    Format: !create_team <team_name>
+    - team_name: Single word (e.g., "Iberian_Soul)
+    If it is a word separated by spaces, a '_' will be replaced
+    """
+    # Join multiple words and replace spaces with underscore only if multiple words
     name = " ".join(name)
-    if admin_role is None:
-        await ctx.send("Only admins can execute this")
-        return
+    if " " in name:
+        name = name.replace(" ", "_")
     if not ctx.channel.name == "admin":
         await ctx.send("Must be executed from admin channel")
         return
@@ -226,33 +233,19 @@ async def create_team(ctx, *name: str):
 
 @bot.command()
 @discord.ext.commands.has_role("admin")
-async def add_player(ctx, *values: str):
+async def add_player(ctx, team_name: str, nickname: str, steamid: str, role_name:str):
     """
     Adds a player with nickname, SteamID (numbers only), and role to a team.
     Format: !add_player <team_name> <nickname> <steamid> <role_name>
-    - team_name: Multi-word (e.g., "Natus Vincere")
+    - team_name: Single-word (e.g., "Natus Vincere")
     - nickname: Single word (e.g., "s1mple")
     - steamid: Numbers only (e.g., "123456789")
     - role_name: captain/player/coach
     """
-    # Check for minimum required arguments
-    if len(values) < 4:
-        await ctx.send("❌ Format: !add_player <team_name> <nickname> <steamid> <role>")
-        return
-    guild = ctx.guild
-    admin_role = discord.utils.get(guild.roles, name="admin")
-
-    if admin_role is None:
-        await ctx.send("Only admins can execute this")
-        return
     
     if not ctx.channel.name == "admin":
         await ctx.send("Must be executed from admin channel")
         return
-
-    *team_name_parts, nickname, steamid, role_name = values
-    team_name = " ".join(team_name_parts)  # Combine team name parts with spaces
-    role_name = role_name.lower()  # Normalize role to lowercase
 
     try:
         await _add_player(ctx, team_name=team_name, nickname=nickname, role_name=role_name, steamid=steamid)
@@ -265,16 +258,9 @@ async def add_player(ctx, *values: str):
 async def delete_player(ctx, nickname: str):
     """
     Deletes a player with nickname.
-    Format: !add_player <nickname>
+    Format: !delete_player <nickname>
     - nickname: Single word (e.g., "s1mple")
     """
-    
-    guild = ctx.guild
-    admin_role = discord.utils.get(guild.roles, name="admin")
-
-    if admin_role is None:
-        await ctx.send("Only admins can execute this")
-        return
 
     if not ctx.channel.name == "admin":
         await ctx.send("Must be executed from admin channel")
@@ -283,19 +269,22 @@ async def delete_player(ctx, nickname: str):
     try:
         await _delete_player(ctx, nickname=nickname)
     except Exception as e:
-        logging.error(f"Error creating team: {e}")
-        await ctx.send(f"❌ Error creating team: {e}")
+        logging.error(f"Error deleting team: {e}")
+        await ctx.send(f"❌ Error deleting team: {e}")
 
 @bot.command()
 @discord.ext.commands.has_role("admin")
 async def delete_team(ctx, *name: str):
-    """Delete team"""
-    guild = ctx.guild
-    admin_role = discord.utils.get(guild.roles, name="admin")
+    """
+    Delete a single team
+    Format: !delete_team <team_name>
+    - team_name Single word (e.g., "Iberian_Soul")
+    """
+    # Join multiple words and replace spaces with underscore only if multiple words
     name = " ".join(name)
-    if admin_role is None:
-        await ctx.send("Only admins can execute this")
-        return
+    if " " in name:
+        name = name.replace(" ", "_")
+
     
     if not ctx.channel.name == "admin":
         await ctx.send("Must be executed from admin channel")
@@ -310,15 +299,14 @@ async def delete_team(ctx, *name: str):
 @bot.command()
 @discord.ext.commands.has_role("admin")
 async def create_teams(ctx, *names: str):
-    """Create a new team"""
+    """
+    Create multiple new teams
+    Format: !create_teams <names>
+    - names: Multi word (e.g., Iberian_Soul Natus_Vincere Astralis)
+    """
     guild = ctx.guild
-    admin_role = discord.utils.get(guild.roles, name="admin")
     names = " ".join(names)
-    names_splitted = [name.strip() for name in names.split(",")]
-    if admin_role is None:
-        await ctx.send("Only admins can execute this")
-        return
-    
+    names_splitted = [name.strip() for name in names.split(" ")]
     if not ctx.channel.name == "admin":
         await ctx.send("Must be executed from admin channel")
         return
@@ -333,12 +321,11 @@ async def create_teams(ctx, *names: str):
 @bot.command()
 @discord.ext.commands.has_role("admin")
 async def all_teams_created(ctx):
-    """Starts the tournament"""
+    """
+    Starts the tournament once all teams are created
+    Format: !all_teams_created
+    """
     guild = ctx.guild
-    admin_role = discord.utils.get(guild.roles, name="admin")
-    if admin_role is None:
-        await ctx.send("Only admins can execute this")
-        return
     
     if not ctx.channel.name == "admin":
         await ctx.send("Must be executed from admin channel")
@@ -353,12 +340,12 @@ async def all_teams_created(ctx):
 @bot.command()
 @discord.ext.commands.has_role("admin")
 async def mock_teams(ctx):
-    """Create mock teams"""
+    """
+    Create mock teams until complete the all the 16 teams
+    NOTE: CAREFUL!! Use this only for testing
+    Format: !mock_teams
+    """
     guild = ctx.guild
-    admin_role = discord.utils.get(guild.roles, name="admin")
-    if admin_role is None:
-        await ctx.send("Only admins can execute this")
-        return
     
     if not ctx.channel.name == "admin":
         await ctx.send("Must be executed from admin channel")
@@ -391,7 +378,6 @@ async def mock_teams(ctx):
             ]
             for nickname, role in players:
                 steamid = str(random.randint(100000, 999999))
-                await ctx.send("add_player")
                 await _add_player(ctx, team_name=team_name, nickname=nickname, role_name=role, steamid=steamid)           
     except Exception as e:
         logging.error(f"Error creating mock teams: {e}")
@@ -399,7 +385,12 @@ async def mock_teams(ctx):
 
 @bot.command()
 async def veto(ctx, map_name: str):
-    guild = ctx.guild
+    """
+    Veto a map from the game admin channel. This only could be executed by the captain
+    of the team that can veto at the moment
+    Format: !veto <map_name>
+        - names: Single word (e.g., "dust2")
+    """
     channel_id = ctx.channel.id
     game = bot.game_service.get_game_by_admin_game_channel_id(admin_game_channel_id=channel_id)
     if game is None:
@@ -410,7 +401,12 @@ async def veto(ctx, map_name: str):
 
 @bot.command()
 async def pick(ctx, map_name: str):
-    guild = ctx.guild
+    """
+    Pick a map from the game admin channel. This only could be executed by the captain
+    of the team that can pick at the moment
+    Format: !pick <map_name>
+        - names: Single word (e.g., "dust2")
+    """
     channel_id = ctx.channel.id
     game = bot.game_service.get_game_by_admin_game_channel_id(admin_game_channel_id=channel_id)
     if game is None:
@@ -422,6 +418,11 @@ async def pick(ctx, map_name: str):
 @bot.command()
 @discord.ext.commands.has_role("admin")
 async def summary(ctx):
+    """
+    Creates summary of the game of the game admin channel. This is only intended to be used if
+    any problem happened when updating game summary.
+    Format: !summary
+    """
     channel_id = ctx.channel.id
     game = bot.game_service.get_game_by_admin_game_channel_id(admin_game_channel_id=channel_id)
     if game is None:
@@ -432,6 +433,17 @@ async def summary(ctx):
 @bot.command()
 @discord.ext.commands.has_role("admin")
 async def result(ctx, map_name: str, team_number: int):
+    """
+    Set the result of a map for a game from an admin game channel. This only can be executed by an admin.
+    Once the game is finished, the results cannot be changed.
+    Team one refers on the first team to appear in the channel name.
+    Team two refers on the second team to appear in the cannel name.
+    Format: !result <map_name> <team_number>
+        - names: Single word (e.g., "dust2")
+        - team_number: Int (1 or 2)
+    If team_number is 1, the Team One wins.
+    If team_number is 2, the Team Two wins.
+    """
     channel_id = ctx.channel.id
     game = bot.game_service.get_game_by_admin_game_channel_id(admin_game_channel_id=channel_id)
     if game is None:
@@ -439,11 +451,15 @@ async def result(ctx, map_name: str, team_number: int):
         return
     await _set_result(ctx, game=game, team_number=team_number, map_name=map_name)
     await _game_summary(ctx, game=game)
-    await _games_summary(ctx)
+    await _tournament_summary(ctx)
     
 @bot.command()
 @discord.ext.commands.has_role("admin")
 async def finish_round(ctx):
+    """
+    Checks if all matches from current round are finished and if true creates the new random games for the next round.
+    Format: !finish_round
+    """
     if not ctx.channel.name == "admin":
         await ctx.send("Must be executed from admin channel")
         return
@@ -453,18 +469,20 @@ async def finish_round(ctx):
 @bot.command()
 @discord.ext.commands.has_role("admin")
 async def autoveto(ctx):
+    """
+    Create automatic veto depending of the game type.
+    NOTE: CAREFUL!! Use this only for testing
+    Format: !autoveto
+    """
     guild = ctx.guild
     if not ctx.channel.name == "admin":
         await ctx.send("Must be executed from admin channel")
         return
     else:
         games = bot.game_service.get_all_games_not_finished(guild_id=guild.id)
-        await ctx.send(f"games_len = {len(games)}")
         for game in games:
             game_to_wins = (await _get_game_to_wins(ctx, game=game)).value
-            await ctx.send(f"autoveto0-{game_to_wins}")
             if game_to_wins == "bo1":
-                await ctx.send(f"autoveto1-{game_to_wins}")
                 await _execute_veto(ctx, game=game, map_name="anubis", game_to_wins=game_to_wins)
                 await _execute_veto(ctx, game=game, map_name="train", game_to_wins=game_to_wins)
                 await _execute_veto(ctx, game=game, map_name="inferno", game_to_wins=game_to_wins)
@@ -472,7 +490,6 @@ async def autoveto(ctx):
                 await _execute_veto(ctx, game=game, map_name="nuke", game_to_wins=game_to_wins)
                 await _execute_veto(ctx, game=game, map_name="ancient", game_to_wins=game_to_wins)
             elif game_to_wins == "bo3":
-                await ctx.send(f"autoveto2-{game_to_wins}")
                 await _execute_veto(ctx, game=game, map_name="anubis", game_to_wins=game_to_wins)
                 await _execute_veto(ctx, game=game, map_name="train", game_to_wins=game_to_wins)
                 await _execute_pick(ctx, game=game, map_name="inferno", game_to_wins=game_to_wins)
@@ -480,7 +497,6 @@ async def autoveto(ctx):
                 await _execute_veto(ctx, game=game, map_name="nuke", game_to_wins=game_to_wins)
                 await _execute_veto(ctx, game=game, map_name="ancient", game_to_wins=game_to_wins)
             elif game_to_wins == "bo5":
-                await ctx.send(f"autoveto3-{game_to_wins}")
                 await _execute_veto(ctx, game=game, map_name="anubis", game_to_wins=game_to_wins)
                 await _execute_veto(ctx, game=game, map_name="train", game_to_wins=game_to_wins)
                 await _execute_pick(ctx, game=game, map_name="inferno", game_to_wins=game_to_wins)
@@ -491,6 +507,11 @@ async def autoveto(ctx):
 @bot.command()
 @discord.ext.commands.has_role("admin")
 async def autoresults(ctx):
+    """
+    Create automatic results depending of the game type.
+    NOTE: CAREFUL!! Use this only for testing
+    Format: !autoresults
+    """
     guild = ctx.guild
     if not ctx.channel.name == "admin":
         await ctx.send("Must be executed from admin channel")
@@ -511,8 +532,31 @@ async def autoresults(ctx):
 
 @bot.command()
 @discord.ext.commands.has_role("admin")
+async def autovetoautoresults(ctx):
+    """
+    Create automatic vetos and results depending of the game type.
+    NOTE: CAREFUL!! Use this only for testing
+    Format: !autovetoautoresults
+    """
+    if not ctx.channel.name == "admin":
+        await ctx.send("Must be executed from admin channel")
+        return
+    else:
+       await ctx.send("Auto vetoing...")
+       await autoveto(ctx)
+       await ctx.send("Auto results...")
+       await autoresults(ctx) 
+
+
+@bot.command()
+@discord.ext.commands.has_role("admin")
 async def tournamentsummary(ctx):
-    await _games_summary(ctx)
+    """
+    Creates summary of the whole tournament. This is only intended to be used if
+    any problem happened when updating tournament summary.
+    Format: !tournamentsummary
+    """
+    await _tournament_summary(ctx)
 
 def setup_logging():
     """Configure logging with file rotation"""
@@ -565,11 +609,11 @@ def _is_valid_team_name(name: str) -> bool:
     return all(c.isalnum() or c.isspace() for c in name)
 
 async def _create_team(ctx, name:str) -> Team:
+    """
+    Creates a new team based on the name.
+    """
     guild = ctx.guild
     try:
-        if not _is_valid_team_name(name=name):
-            await ctx.send("Team names can only contain alphanumerics and spaces.")
-            return
         discord_info_category = discord.utils.get(guild.categories, name="Info")
         discord_teams_channel = discord.utils.get(guild.text_channels, name="teams", category=discord_info_category)
         if discord_teams_channel is None:
@@ -584,8 +628,6 @@ async def _create_team(ctx, name:str) -> Team:
         msg = await discord_teams_channel.send(embed=embed)
 
         team = Team(name=name, guild_id=guild.id, discord_message_id=msg.id)
-        await ctx.send(f"Creating team {team}...")
-        logging.info(team.name)
         team.id = bot.team_service.create_team(team=team)
 
         logging.info(f"Team {name} created in guild {guild.name}")
@@ -603,6 +645,9 @@ async def _create_team(ctx, name:str) -> Team:
         return None
 
 async def _add_player(ctx, team_name:str, nickname:str, role_name:str, steamid:str) -> Player:
+    """
+    Adds a player to a team.
+    """
     guild = ctx.guild
     # Validate player name (single word)
     if " " in nickname:
@@ -621,7 +666,6 @@ async def _add_player(ctx, team_name:str, nickname:str, role_name:str, steamid:s
             await ctx.send("There is no teams channel, please use !start")
             return
         team = bot.team_service.get_team_by_name(name=team_name, guild_id=guild.id)
-        await ctx.send(f"Team: {team.name}")
         if team is None:
             return
         player = bot.player_service.get_player_by_nickname(nickname=nickname, guild_id=guild.id)
@@ -638,9 +682,7 @@ async def _add_player(ctx, team_name:str, nickname:str, role_name:str, steamid:s
         players = bot.player_service.get_players_by_team_id(team_id=team.id)
 
         if role_name == "captain":
-            await ctx.send(players)
             count_captains = sum(1 for p in players if p.role_name == role_name)
-            await ctx.send(f"count_captains={count_captains }")
             if count_captains >= 1:
                 await ctx.send("❌ Only one captain can be assigned.")
                 return None
@@ -679,6 +721,9 @@ async def _add_player(ctx, team_name:str, nickname:str, role_name:str, steamid:s
         return None
 
 async def _delete_player(ctx, nickname:str):
+    """
+    Delets a player from a team.
+    """
     guild = ctx.guild
     # Validate player name (single word)
     if " " in nickname:
@@ -696,9 +741,6 @@ async def _delete_player(ctx, nickname:str):
         return
     
     team = bot.team_service.get_team_by_id(team_id=player.team_id)
-    if team is None:
-        ctx.send(f"Player's team don't exists. Is weird.")
-        return
     player.id = bot.player_service.delete_player_by_id(id=player.id)
     await ctx.send(f"Player {nickname} deleted successfully.")
 
@@ -709,12 +751,11 @@ async def _delete_player(ctx, nickname:str):
     return    
 
 async def _delete_team(ctx, name:str):
+    """
+    Deletes a team and its players.
+    """
     guild = ctx.guild
     try:
-        if not _is_valid_team_name(name=name):
-            await ctx.send("Team names can only contain alphanumerics and spaces.")
-            return
-
         discord_info_category = discord.utils.get(guild.categories, name="Info")
         discord_teams_channel = discord.utils.get(guild.text_channels, name="teams", category=discord_info_category)
         if discord_teams_channel is None:
@@ -728,6 +769,18 @@ async def _delete_team(ctx, name:str):
 
         discord_team_message = await discord_teams_channel.fetch_message(team.discord_message_id)
         await discord_team_message.delete()
+
+        captain_role = discord.utils.get(guild.roles, name=f"{name}_captain")
+        player_role = discord.utils.get(guild.roles, name=f"{name}_player")
+        coach_role = discord.utils.get(guild.roles, name=f"{name}_coach")
+
+        await captain_role.delete()
+        await player_role.delete()
+        await coach_role.delete()
+
+        players = bot.player_service.get_players_by_team_id(team_id=team.id)
+        for player in players:
+            bot.player_service.delete_player_by_id(id=player.id)
 
         logging.info(team.name)
         team.id = bot.team_service.delete_team_by_id(id=team.id)
@@ -927,7 +980,6 @@ async def _create_game(ctx, game: Game, category: discord.CategoryChannel):
     }
 
     admin_channel_name = f"ADMINS {team_one.name} vs {team_two.name}"
-    await ctx.send(category)
     admin_channel = await _create_text_channel(ctx, channel_name=admin_channel_name, overwrites=admin_overwrites, category=category)
     await admin_channel.send(f"This channel will be used for communicating between org and teams on this game, remember that only admins and users with role {team_one.name}_captain and {team_two.name}_captain can write in this channel.")
     await admin_channel.send(f"Time of picks and bans, {team_one.name} captain please send your veto with the command `!veto <mapname>`")
@@ -1027,11 +1079,13 @@ async def _create_games(ctx, game_type: str):
     
     discord_game_category = discord.utils.get(guild.categories, name=game_category_name)
     for game in games:
-        await ctx.send(f"Creating game {game}")
         await _create_game(ctx, game, category=discord_game_category)
-    await _games_summary(ctx)
+    await _tournament_summary(ctx)
 
-async def _games_summary(ctx):
+async def _tournament_summary(ctx):
+    """
+    Creates tournament summary
+    """
     guild = ctx.guild
     game_rounds = [
         ("swiss_1", "Swiss round 1 (0 Wins, 0 Losses)"),
@@ -1042,7 +1096,7 @@ async def _games_summary(ctx):
         ("swiss_3_low", "Swiss round 3 low (0 Wins, 2 Losses)"),
         ("swiss_4_high", "Swiss round 4 high (2 Wins, 1 Losses)"),
         ("swiss_4_low", "Swiss round 4 low (1 Win, 2 Losses)"),
-        ("swiss_5", "Swiss round 2 high (2 Wins, 2 Losses)"),
+        ("swiss_5", "Swiss round 5 (2 Wins, 2 Losses)"),
         ("quarterfinal", "Quarter-final"),
         ("semifinal", "Semi-final"),
         ("third_place", "Third place"),
@@ -1102,26 +1156,7 @@ async def _games_summary(ctx):
                 bot.summary_service.create_summary(summary=summary)
             else:
                 msg = await discord_summary_channel.fetch_message(summary.message_id)
-                await ctx.send(msg.id)
                 await msg.edit(embed=embed)
-
-async def _check_all_teams(ctx) -> bool:
-    """
-    Checks if all teams have been created and have enough players
-    """
-    guild = ctx.guild
-    all_teams = bot.team_service.get_all_teams(guild_id=guild.id)
-    if len(all_teams) != 16:
-        return False
-    for team in all_teams:
-        members = bot.player_service.get_players_by_team_id(ctx, team.id)
-        captain = next((m for m in members if m.role_name == "captain"), None)
-        players = [m for m in members if m.role_name == "player"]
-        coaches = [m for m in members if m.role_name == "coach"]
-
-        if len(captain) != 1 or len(players) != 4 or len(coaches) < 1 or len(coaches) > 2:
-            return False
-    return True
 
 async def _get_game_to_wins(ctx, game: Game) -> str:
     """
@@ -1136,11 +1171,16 @@ async def _get_game_to_wins(ctx, game: Game) -> str:
         key = "swiss_to_three_wins"
     else:
         key = f"{game_type}_rounds"
-    await ctx.send(f"game_type = {game_type}, key = {key}")
     return bot.setting_service.get_setting_by_name(guild_id=guild.id, setting_key=key)
 
 async def _execute_veto(ctx, game: Game, game_to_wins:str, map_name:str):
+    """
+    Executes a veto on a game
+    """
     guild = ctx.guild
+
+    admin_channel = bot.get_channel(game.admin_game_channel_id)
+
     vetoes = bot.veto_service.get_all_vetoes_by_game(guild_id=guild.id, game_id=game.id)
     picks = bot.pick_service.get_all_picks_by_game(guild_id=guild.id, game_id=game.id)
 
@@ -1156,11 +1196,11 @@ async def _execute_veto(ctx, game: Game, game_to_wins:str, map_name:str):
     remaining_maps = [map_ for map_ in map_pool if map_ not in map_names]
 
     if map_name not in remaining_maps:
-        await ctx.send(f"This map was already vetoed or picked or is not in the map pool. Please select one of {remaining_maps}.")
+        await admin_channel.send(f"This map was already vetoed or picked or is not in the map pool. Please select one of {remaining_maps}.")
         return
 
     if (all_order > 6):
-        await ctx.send("All vetoes have been executed in this game.")
+        await admin_channel.send("All vetoes have been executed in this game.")
         return
     if (all_order % 2 == 0): # Have to be done by team 1
         current_team = team_one
@@ -1173,32 +1213,32 @@ async def _execute_veto(ctx, game: Game, game_to_wins:str, map_name:str):
     roles = ctx.author.roles
     if role_name not in [role.name for role in roles]:
         message = f"You are not the captain of {current_team.name}."
-        await ctx.send(message)
+        await admin_channel.send(message)
         return  
     
     veto = Veto(order_veto=all_order + 1, game_id=game.id, team_id=current_team.id, map_name=map_name, guild_id=guild.id)
     if game_to_wins == "bo1":
-        await ctx.send(f"{current_team.name} vetoed {map_name}")
+        await admin_channel.send(f"{current_team.name} vetoed {map_name}")
         if all_order + 1 < 6: # Still vetoing
-            await ctx.send(f"{next_team.name} time to veto.")
+            await admin_channel.send(f"{next_team.name} time to veto.\nUse the command `!veto <map_name>` for vetoing a map.")
     elif game_to_wins == "bo3":
         if all_order == 2 or all_order == 3: # pick turn
-            await ctx.send(f"Is pick time!")
+            await admin_channel.send(f"Is pick time!")
             return
-        await ctx.send(f"{team_one.name} vetoed {map_name}")
+        await admin_channel.send(f"{team_one.name} vetoed {map_name}")
         if all_order + 1 == 2 or all_order + 1 == 3: # time to pick
-            await ctx.send(f"{next_team.name} time to pick.")
+            await admin_channel.send(f"{next_team.name} time to pick.\nUse the command `!pick <map_name>` for picking a map.")
         elif all_order + 1 < 6:
-            await ctx.send(f"{next_team.name} time to veto.")
+            await admin_channel.send(f"{next_team.name} time to veto.\nUse the command `!veto <map_name>` for vetoing a map.")
     elif game_to_wins == "bo5":
         if all_order + 1 > 2:
-            await ctx.send(f"Is pick time!")
+            await admin_channel.send(f"Is pick time!")
             return
-        await ctx.send(f"{team_one.name} vetoed {map_name}")
+        await admin_channel.send(f"{team_one.name} vetoed {map_name}")
         if all_order + 1 == 1:
-            await ctx.send(f"{next_team.name} time to veto.")
+            await admin_channel.send(f"{next_team.name} time to veto.\nUse the command `!veto <map_name>` for vetoing a map.")
         elif all_order + 1 < 6:
-            await ctx.send(f"{next_team.name} time to pick.")
+            await admin_channel.send(f"{next_team.name} time to pick.\nUse the command `!pick <map_name>` for picking a map.")
     bot.veto_service.create_veto(veto)
 
     if all_order + 1 == 6: # Remaining map is the decider
@@ -1206,7 +1246,7 @@ async def _execute_veto(ctx, game: Game, game_to_wins:str, map_name:str):
         remaining_maps = [map_ for map_ in map_pool if map_ not in map_names]
         pick = Pick(order_pick=all_order + 2, game_id=game.id, team_id=-1, map_name=remaining_maps[0], guild_id=guild.id)
         bot.pick_service.create_pick(pick)
-        await ctx.send(f"Decider will be {remaining_maps[0]}.")
+        await admin_channel.send(f"Decider will be {remaining_maps[0]}.")
         await _create_game_maps(ctx, game=game)
         
     public_channel = bot.get_channel(game.game_channel_id)
@@ -1216,11 +1256,16 @@ async def _execute_veto(ctx, game: Game, game_to_wins:str, map_name:str):
             msg = await public_channel.fetch_message(game.public_game_message_id)
             await msg.edit(embed=embed)
         except Exception as e:
-            logger.error(f"Failed to update message: {e}")
-            await ctx.send(f"⚠️ Pick added but failed to update display: {e}")
+            await admin_channel.send(f"⚠️ Pick added but failed to update display: {e}")
 
 async def _execute_pick(ctx, game: Game, game_to_wins:str, map_name:str):
+    """
+    Executes a pick on a game
+    """
     guild = ctx.guild
+
+    admin_channel = bot.get_channel(game.admin_game_channel_id)
+
     vetoes = bot.veto_service.get_all_vetoes_by_game(guild_id=guild.id, game_id=game.id)
     picks = bot.pick_service.get_all_picks_by_game(guild_id=guild.id, game_id=game.id)
 
@@ -1236,11 +1281,11 @@ async def _execute_pick(ctx, game: Game, game_to_wins:str, map_name:str):
     remaining_maps = [map_ for map_ in map_pool if map_ not in map_names]
 
     if map_name not in remaining_maps:
-        await ctx.send(f"This map was already vetoed or picked or is not in the map pool. Please select one of {remaining_maps}.")
+        await admin_channel.send(f"This map was already vetoed or picked or is not in the map pool. Please select one of {remaining_maps}.")
         return
 
     if (all_order > 6):
-        await ctx.send("All picks have been executed in this game.")
+        await admin_channel.send("All picks have been executed in this game.")
         return
     if (all_order % 2 == 0): # Have to be done by team 1
         current_team = team_one
@@ -1253,31 +1298,31 @@ async def _execute_pick(ctx, game: Game, game_to_wins:str, map_name:str):
     roles = ctx.author.roles
     if role_name not in [role.name for role in roles]:
         message = f"You are not the captain of {current_team.name}."
-        await ctx.send(message)
+        await admin_channel.send(message)
         return  
 
     pick = Pick(order_pick=all_order + 1, game_id=game.id, team_id=current_team.id, map_name=map_name, guild_id=guild.id)
     if game_to_wins == "bo1":
-        await ctx.send(f"No picks on bo1 have to be assigned.")
+        await admin_channel.send(f"No picks on bo1 have to be assigned.")
         return
     elif game_to_wins == "bo3":
         if all_order != 2 and all_order != 3: # pick turn
-            await ctx.send(f"Is veto time!")
+            await admin_channel.send(f"Is veto time!")
             return
-        await ctx.send(f"{team_one.name} picked {map_name}")
+        await admin_channel.send(f"{team_one.name} picked {map_name}")
         if all_order + 1 == 2 or all_order + 1 == 3: # time to pick
-            await ctx.send(f"{next_team.name} time to pick.")
+            await admin_channel.send(f"{next_team.name} time to pick.\nUse the command `!pick <map_name>` for picking a map.")
         elif all_order + 1 < 6:
-            await ctx.send(f"{next_team.name} time to veto.")
+            await admin_channel.send(f"{next_team.name} time to veto.\nUse the command `!veto <map_name>` for vetoing a map.")
     elif game_to_wins == "bo5":
         if all_order + 1 < 2:
-            await ctx.send(f"Is veto time!")
+            await admin_channel.send(f"Is veto time!")
             return
-        await ctx.send(f"{team_one.name} vetoed {map_name}")
+        await admin_channel.send(f"{team_one.name} vetoed {map_name}")
         if all_order + 1 == 1:
-            await ctx.send(f"{next_team.name} time to veto.")
+            await admin_channel.send(f"{next_team.name} time to veto.\nUse the command `!veto <map_name>` for vetoing a map.")
         elif all_order + 1 < 6:
-            await ctx.send(f"{next_team.name} time to pick.")
+            await admin_channel.send(f"{next_team.name} time to pick.\nUse the command `!pick <map_name>` for picking a map.")
     bot.pick_service.create_pick(pick)
 
     if all_order + 1 == 6: # Remaining map is the decider
@@ -1285,7 +1330,7 @@ async def _execute_pick(ctx, game: Game, game_to_wins:str, map_name:str):
         remaining_maps = [map_ for map_ in map_pool if map_ not in map_names]
         pick = Pick(order_pick=all_order + 2, game_id=game.id, team_id=-1, map_name=remaining_maps[0], guild_id=guild.id)
         bot.pick_service.create_pick(pick)
-        await ctx.send(f"Decider will be {remaining_maps[0]}.")
+        await admin_channel.send(f"Decider will be {remaining_maps[0]}.")
         await _create_game_maps(ctx, game=game)
         
     public_channel = bot.get_channel(game.game_channel_id)
@@ -1295,10 +1340,12 @@ async def _execute_pick(ctx, game: Game, game_to_wins:str, map_name:str):
             msg = await public_channel.fetch_message(game.public_game_message_id)
             await msg.edit(embed=embed)
         except Exception as e:
-            logger.error(f"Failed to update message: {e}")
             await ctx.send(f"⚠️ Pick added but failed to update display: {e}")
    
 async def _game_embed(ctx, game: Game) -> discord.Embed:
+    """
+    Creates the summary embed for a game
+    """
     guild = ctx.guild
 
     game_to_wins = await _get_game_to_wins(ctx, game)
@@ -1353,6 +1400,9 @@ async def _game_embed(ctx, game: Game) -> discord.Embed:
     return embed
 
 async def _create_game_maps(ctx, game: Game) -> list[GameMap]:
+    """
+    Creates all game maps for a game depending on its picks
+    """
     guild = ctx.guild
     picks = bot.pick_service.get_all_picks_by_game_ordered(guild_id=guild.id, game_id=game.id)
     i = 1
@@ -1365,6 +1415,9 @@ async def _create_game_maps(ctx, game: Game) -> list[GameMap]:
     return game_maps
 
 async def _game_summary(ctx, game: Game):
+    """
+    Creates a game summary
+    """
     public_channel = bot.get_channel(game.game_channel_id)
     embed = await _game_embed(ctx, game)
     if public_channel:
@@ -1372,12 +1425,16 @@ async def _game_summary(ctx, game: Game):
             msg = await public_channel.fetch_message(game.public_game_message_id)
             await msg.edit(embed=embed)
         except Exception as e:
-            logger.error(f"Failed to update message: {e}")
-            await ctx.send(f"⚠️ Pick added but failed to update display: {e}")
+            await ctx.send(f"⚠️ Error on sending msg: {e}")
 
 async def _set_result(ctx, game: Game, team_number: int, map_name: str):
+    """
+    Sets the winner on a game map
+    """
+    admin_channel = bot.get_channel(game.admin_game_channel_id)
+
     if game.team_winner > 0:
-        await ctx.send("The winner have been already setted.")
+        await admin_channel.send("The winner have been already setted.")
         return
     team_one = bot.team_service.get_team_by_id(game.team_one_id)
     team_two = bot.team_service.get_team_by_id(game.team_two_id)
@@ -1389,16 +1446,16 @@ async def _set_result(ctx, game: Game, team_number: int, map_name: str):
         team_looser = team_one
         team_winner = team_two
     else:
-        await ctx.send(f"Winner must be set as 1 if winner is {team_one.name} or 2 if winner is {team_two.name}.")
+        await admin_channel.send(f"Winner must be set as 1 if winner is {team_one.name} or 2 if winner is {team_two.name}.")
         return
     
     game_map = bot.game_map_service.get_game_map_by_game_and_map_name(guild_id=guild.id, game_id=game.id, map_name=map_name)
     if game_map == None:
-        await ctx.send(f"The map {map_name} is not one of the game.")
+        await admin_channel.send(f"The map {map_name} is not one of the game.")
         return
     game_map.team_id_winner = team_winner.id
     bot.game_map_service.update_game_map(game_map)
-    await ctx.send(f"{team_winner.name} won map number {game_map.game_number} played in {map_name}.")
+    await admin_channel.send(f"{team_winner.name} won map number {game_map.game_number} played in {map_name}.")
 
     game_maps = bot.game_map_service.get_all_game_maps_by_game(guild_id=guild.id, game_id=game.id)
     team_one_wins = 0
@@ -1409,10 +1466,8 @@ async def _set_result(ctx, game: Game, team_number: int, map_name: str):
         elif game_map.team_id_winner == team_two.id:
             team_two_wins = team_two_wins + 1
     
-    await ctx.send(f"team_one_wins={team_one_wins} - team_two_wins = {team_two_wins}")
 
     games_to_wins = await _get_game_to_wins(ctx, game)
-    await ctx.send(f"games_to_wins={games_to_wins.value}")
     game_winner = None
     if games_to_wins.value == "bo1":
         if team_one_wins >= 1:
@@ -1420,7 +1475,6 @@ async def _set_result(ctx, game: Game, team_number: int, map_name: str):
         elif team_two_wins >= 1:
             game_winner = team_two
     elif games_to_wins.value == "bo3":
-        await ctx.send("is bo3")
         if team_one_wins >= 2:
             game_winner = team_one
         elif team_two_wins >= 2:
@@ -1432,7 +1486,7 @@ async def _set_result(ctx, game: Game, team_number: int, map_name: str):
             game_winner = team_two
     
     if game_winner is not None:
-        await ctx.send(f"The winner of the game is {game_winner.name}.")
+        await admin_channel.send(f"The winner of the game is {game_winner.name}.")
         game.team_winner = game_winner.id
         bot.game_service.update_game(game=game)
         await _game_summary(ctx, game)
@@ -1458,6 +1512,7 @@ async def _set_result(ctx, game: Game, team_number: int, map_name: str):
         voice_channel_team_two = discord.utils.get(guild.voice_channels, name=voice_channel_team_two_name)
         if voice_channel_team_two:
             await voice_channel_team_two.delete()
+        await _tournament_summary(ctx)
 
 def main():
     try:

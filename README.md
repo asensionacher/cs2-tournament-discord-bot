@@ -12,14 +12,13 @@ The features of the bot are:
   - Elimination stage (quarterfinal, Semifinal, Third-place and Final).
 - Auto creation of games.
 - Map pick and bans system.
-- Creation of all necessary Discrod roles, text channels and voice channels.
+- Creation of all necessary Discord roles, text and voice channels.
+- Summaries for tournament and games.
 
 ## Missing features
 
 This bot is in a very early stage, so keep in mind that bugs and missing features exists:
 
-- [ ] Only `bo3` system. Planned to have a way to set it between `bo1`, `bo3` and `bo5` for each game type (swiss round 1, swiss round 2, swiss round 3, swiss round 4, swiss round 5, quarterfinal, semifinal, third place and final).
-- [ ] Code is now a mess. I'm not a developer, but a code refactor is desired.
 - [ ] Adding a `league-system` instead of `swiss-system` before elimination stage. 
 - [ ] Adding more teams, now only 16 teams can be added.
 - [ ] Add RCON commands for automatically starting matches using [MatchZy match_setup](https://shobhit-pathak.github.io/MatchZy/match_setup/).
