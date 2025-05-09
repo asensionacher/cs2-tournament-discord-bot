@@ -1074,25 +1074,24 @@ async def _games_summary(ctx):
                 if games_to_wins.value == "bo1":
                     if team_one_wins >= 1:
                         team_one_name = f"✅{team_one_name}"
-                        team_one_name = f"{team_two_name}❌"
+                        team_two_name = f"{team_two_name}❌"
                     elif team_two_wins >= 1:
                         team_one_name = f"❌{team_one_name}"
-                        team_one_name = f"{team_two_name}✅"
+                        team_two_name = f"{team_two_name}✅"
                 elif games_to_wins.value == "bo3":
-                    await ctx.send("is bo3")
                     if team_one_wins >= 2:
                         team_one_name = f"✅{team_one_name}"
-                        team_one_name = f"{team_two_name}❌"
+                        team_two_name = f"{team_two_name}❌"
                     elif team_two_wins >= 2:
                         team_one_name = f"❌{team_one_name}"
-                        team_one_name = f"{team_two_name}✅"
+                        team_two_name = f"{team_two_name}✅"
                 elif games_to_wins.value == "bo5":
                     if team_one_wins >= 3:
                         team_one_name = f"✅{team_one_name}"
-                        team_one_name = f"{team_two_name}❌"
+                        team_two_name = f"{team_two_name}❌"
                     elif team_two_wins >= 3:
                         team_one_name = f"❌{team_one_name}"
-                        team_one_name = f"{team_two_name}✅"
+                        team_two_name = f"{team_two_name}✅"
 
                 text += f"・{team_one_name} {team_one_wins}:{team_two_wins} {team_two_name}\n"
             print(text)
