@@ -515,7 +515,7 @@ async def autoresults(ctx):
             await ctx.send("Must be executed from admin channel")
             return
         else:
-        games = bot.game_service.get_all_games_not_finished(guild_id=guild.id)
+            games = bot.game_service.get_all_games_not_finished(guild_id=guild.id)
         for game in games:
             game_to_wins = (await _get_game_to_wins(ctx, game=game)).value
             if game_to_wins == "bo1":
