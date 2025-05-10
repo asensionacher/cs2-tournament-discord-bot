@@ -85,11 +85,10 @@ async def help(ctx):
         "• `!start` - Initialize server setup (roles, categories, channels)\n\n"
         
         "**Team Management:**\n"
-        "• `!create_team <teamname>` - Create a new team\n"
-        "• `!create_teams <team1,team2,...>` - Create multiple teams\n"
-        "• `!add_player <teamname> <nickname> <steamid> <role>` - Add player to team\n"
+        "• `!create_team <team_name>` - Create a new team\n"
+        "• `!add_player <team_name> <nickname> <steamid> <role>` - Add player to team\n"
         "  Roles can be: captain/coach/player\n"
-        "• `!delete_team <teamname>` - Delete team\n"
+        "• `!delete_team <team_name>` - Delete team\n"
         "• `!delete_player <nickname>` - Delete player\n\n"
         
         "**Tournament Flow:**\n"
@@ -104,9 +103,10 @@ async def help(ctx):
         "• `!summary` - Show game status\n\n"
 
         "**Admin Testing:**\n"
-        "• `!mock_teams` - Create 16 test teams with players\n"
-        "• `!autoveto` - Auto execute vetos for all games\n"
+        "• `!mock_teams` - Create mock teams until 16 teams\n"
+        "• `!autoveto` - Auto execute vetos for all games\n" 
         "• `!autoresults` - Auto set results for all games\n"
+        "• `!autovetoautoresults` - Auto veto and set results\n"
     )
     
     try:
