@@ -25,7 +25,6 @@ This bot is in a very early stage, so keep in mind that bugs and missing feature
 - [ ] Receive [MatchZy Events & Forwards](https://shobhit-pathak.github.io/MatchZy/events_and_forwards/) for automatically set map and games winners.
 - [ ] Auto host games in [dathost](https://dathost.net/) using their API.
 - [ ] Timer for getting game information in [dathost](https://dathost.net/) server until map is over.
-- [ ] Permit team and players names with space
 
 ## How to use
 

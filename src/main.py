@@ -83,6 +83,10 @@ async def help(ctx):
         
         "**Initial Setup:**\n"
         "• `!start` - Initialize server setup (roles, categories, channels)\n\n"
+
+        "**Game Settings:**\n"
+        "• `!set_game_type <round_name> <game_type>` - Set game type for a round\n"
+        "• `!get_settings` - Get all settings for the server\n"
         
         "**Team Management:**\n"
         "• `!create_team <team_name>` - Create a new team\n"
@@ -107,6 +111,8 @@ async def help(ctx):
         "• `!autoveto` - Auto execute vetos for all games\n" 
         "• `!autoresults` - Auto set results for all games\n"
         "• `!autovetoautoresults` - Auto veto and set results\n"
+        "• `!delete_games <game_type>` - Delete all games from a round\n"
+        "• `!im_all_teams_captain` - Make my user captain of all teams\n"
     )
     
     try:
@@ -199,7 +205,8 @@ async def start(ctx):
             "semifinal_rounds": {"value": "bo3"},
             "final_rounds": {"value": "bo5"},
             "third_place_rounds": {"value": "bo3"},
-            "start_executed": {"value": "true"}
+            "start_executed": {"value": "true"},
+            "all_teams_created": {"value": "false"},
         }
 
         for key, config in settings.items():
@@ -304,12 +311,19 @@ async def all_teams_created(ctx):
     Format: !all_teams_created
     """
     guild = ctx.guild
-    
+    all_teams_created_setting = bot.setting_service.get_setting_by_name(
+        setting_key="all_teams_created", guild_id=guild.id)
+    if all_teams_created_setting is not None:
+        if all_teams_created_setting.value == "true":
+            await ctx.send("Tournament already started!")
+            return
     if not ctx.channel.name == "admin":
         await ctx.send("Must be executed from admin channel")
         return
     
     try:
+        await _create_server_setting(ctx, key="all_teams_created", value="true")
+        await ctx.send("All teams created, tournament started! Remember, you cannot change server settings now.")
         await _set_new_round(ctx)
     except Exception as e:
         logging.error(f"Error during all_teams_created command: {e}")
@@ -564,6 +578,125 @@ async def tournamentsummary(ctx):
     except Exception as e:
         logging.error(f"Error during tournamentsummary command: {e}")
         await ctx.send(f"❌ Error during tournamentsummary command: {e}")    
+
+@bot.command()
+@discord.ext.commands.has_role("admin")
+async def set_game_type(ctx, round_name:str, game_type:str):
+    """
+    Set the game type for a round.
+    Format: !set_game_type <round_name> <game_type>
+        - round_name: Single word (e.g., "quarterfinals")
+        - game_type: Single word (e.g., "bo1", "bo3", "bo5")
+    """
+    try:
+        if not ctx.channel.name == "admin":
+            await ctx.send("Must be executed from admin channel")
+            return
+        else:
+            if round_name not in ["swiss_not_to_three_wins", "swiss_to_three_wins", "quarterfinal_rounds", "semifinal_rounds", "final_rounds", "third_place_rounds"]:
+                await ctx.send("❌ Invalid round name! Must be one of: swiss_not_to_three_wins, swiss_to_three_wins, quarterfinal_rounds, semifinal_rounds, final_rounds, third_place_rounds")
+                return
+            if game_type not in ["bo1", "bo3", "bo5"]:
+                await ctx.send("❌ Invalid game type! Must be one of: bo1, bo3, bo5")
+                return
+            setting = await _create_server_setting(ctx, key=round_name, value=game_type)
+            if setting is None:
+                await ctx.send("❌ Error creating setting")
+                return
+            await ctx.send(f"Game type for {round_name} set to {game_type}")
+    except Exception as e:
+        logging.error(f"Error during set_game_type command: {e}")
+        await ctx.send(f"❌ Error during set_game_type command: {e}")
+
+@bot.command()
+@discord.ext.commands.has_role("admin")
+async def get_settings(ctx):
+    """
+    Get all settings for the server.
+    Format: !get_settings
+    """
+    try:
+        if not ctx.channel.name == "admin":
+            await ctx.send("Must be executed from admin channel")
+            return
+        else:
+            guild = ctx.guild
+            settings = bot.setting_service.get_all_settings(guild_id=guild.id)
+            if not settings:
+                await ctx.send("No settings found.")
+                return
+            settings_msg = "Settings:\n"
+            for setting in settings:
+                settings_msg += f"{setting.key}: {setting.value}\n"
+            await ctx.send(settings_msg)
+    except Exception as e:
+        logging.error(f"Error during get_settings command: {e}")
+        await ctx.send(f"❌ Error during get_settings command: {e}")
+
+@bot.command()
+@discord.ext.commands.has_role("admin")
+async def delete_games(ctx, game_type:str):
+    """
+    Delete all games from a round and its channels.
+    Format: !delete_games <game_type>
+        - game_type: Single word (e.g., "quarterfinals")
+    """
+    try:
+        if not ctx.channel.name == "admin":
+            await ctx.send("Must be executed from admin channel")
+            return
+        else:
+            if game_type not in ["swiss_1", "swiss_2_high", "swiss_2_low", "swiss_3_high", "swiss_3_low", "quarterfinal_rounds", "semifinal_rounds", "final_rounds", "third_place_rounds"]:
+                await ctx.send("❌ Invalid game type name! Must be one of: swiss_1, swiss_2_high, swiss_2_low, swiss_3_high, swiss_3_low, quarterfinal_rounds, semifinal_rounds, final_rounds, third_place_rounds")
+                return
+            # Delete all games and channels from the specified round
+            games = bot.game_service.get_games_by_type(game_type=game_type, guild_id=ctx.guild.id)
+            if not games:
+                await ctx.send(f"No games found for {game_type}.")
+                return  
+            for game in games:
+                public_channel = bot.get_channel(game.game_channel_id)
+                await public_channel.delete()
+                admin_channel = bot.get_channel(game.admin_game_channel_id)
+                await admin_channel.delete()
+                voice_channel_team_one = bot.get_channel(game.voice_channel_team_one_id)
+                await voice_channel_team_one.delete()
+                voice_channel_team_two = bot.get_channel(game.voice_channel_team_two_id)
+                await voice_channel_team_two.delete()
+                # Delete game from database
+                bot.game_service.delete_game_by_id(id=game.id)
+            await ctx.send(f"All games from {game_type} deleted successfully.")
+    except Exception as e:
+        logging.error(f"Error during delete_games command: {e}")
+        await ctx.send(f"❌ Error during delete_games command: {e}")
+
+@bot.command()
+@discord.ext.commands.has_role("admin")
+async def im_all_teams_captain(ctx):
+    """
+    Make my user captain of all teams.
+    Format: !im_all_teams_captain
+    """
+    try:
+        if not ctx.channel.name == "admin":
+            await ctx.send("Must be executed from admin channel")
+            return
+        else:
+            guild = ctx.guild
+            user = ctx.author
+            teams = bot.team_service.get_all_teams(guild_id=guild.id)
+            for team in teams:
+                role_name = f"{team.name}_captain"
+                role = discord.utils.get(guild.roles, name=role_name)
+                if role is None:
+                    await ctx.send(f"❌ Role {role_name} not found.")
+                    return
+                # Add user to the captain role
+                await user.add_roles(role)
+            await ctx.send(f"User {user.name} set as captain for all teams.")
+    except Exception as e:
+        logging.error(f"Error during im_all_teams_captain command: {e}")
+        await ctx.send(f"❌ Error during im_all_teams_captain command: {e}")
 
 def setup_logging():
     """Configure logging with file rotation"""
@@ -873,10 +1006,17 @@ async def _create_server_setting(ctx, key:str, value:str) -> Setting:
     Create a server setting if it don't exists
     """
     guild = ctx.guild
+    all_teams_created_setting = bot.setting_service.get_setting_by_name(guild_id=guild.id, setting_key="all_teams_created")
+    if all_teams_created_setting is not None:
+        if all_teams_created_setting.value == "true":
+            await ctx.send("❌ You cannot change server settings once the tournament has started.")
+            return None
+        
     setting = bot.setting_service.get_setting_by_name(guild_id=guild.id, setting_key=key)
 
     if setting is not None:
-        return setting
+        setting.value = value
+        bot.setting_service.update_setting(setting=setting)
     else:
         setting = Setting(guild_id=guild.id, key=key, value=value)
         setting.id = bot.setting_service.create_setting(setting=setting)
