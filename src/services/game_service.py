@@ -104,6 +104,18 @@ class GameService:
         )
         self.conn.commit()
         return
+
+    def delete_games_by_round(self, game_type: str):
+        """Delete game by id"""
+        cursor = self.conn.execute(
+            """
+            DELETE FROM game 
+            where game_type = ?
+            """,
+            (game_type,)
+        )
+        self.conn.commit()
+        return
     
     def update_game(self, game: Game):
         """Update an existing game"""

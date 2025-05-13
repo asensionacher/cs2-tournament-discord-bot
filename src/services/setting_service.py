@@ -53,3 +53,15 @@ class SettingService:
         )
         self.conn.commit()
         return
+
+    def update_setting(self, setting: Setting):
+        """Update a setting"""
+        cursor = self.conn.execute(
+            """
+            UPDATE setting 
+            SET value = ?
+            WHERE key = ? AND guild_id = ?
+            """,
+            (setting.value, setting.key, setting.guild_id)
+        )
+        self.conn.commit()
