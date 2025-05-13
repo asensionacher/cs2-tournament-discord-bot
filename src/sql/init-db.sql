@@ -42,6 +42,13 @@ CREATE TABLE IF NOT EXISTS game (
     voice_channel_team_one_id INTEGER NOT NULL,
     voice_channel_team_two_id INTEGER NOT NULL,
     public_game_message_id INTEGER NOT NULL,
+    server_ip TEXT DEFAULT '',
+    server_port TEXT DEFAULT '',
+    server_password TEXT DEFAULT '',
+    hltv_ip TEXT DEFAULT '',
+    hltv_port TEXT DEFAULT '',
+    hltv_password TEXT DEFAULT '',
+    rcon_password TEXT DEFAULT '',
     FOREIGN KEY (team_one_id) REFERENCES team(id) ON DELETE CASCADE,
     FOREIGN KEY (team_two_id) REFERENCES team(id) ON DELETE CASCADE
 );

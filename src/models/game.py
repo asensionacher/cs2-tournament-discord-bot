@@ -16,9 +16,14 @@ class Game:
         voice_channel_team_one_id: Voice channel used for ingame for team one
         voice_channel_team_two_id: Voice channel used for ingame for team two
         public_game_message_id: Message id where the summary of the game is setted
-    """
-    # Required fields first
-    
+        server_ip: Server IP address
+        server_port: Server port
+        server_password: Server password
+        hltv_ip: HLTV IP address
+        hltv_port: HLTV port
+        hltv_password: HLTV password
+        rcon_password: RCON password
+    """    
     # Optional fields with defaults
     id: Optional[int] = None
     guild_id: Optional[int] = None
@@ -31,3 +36,10 @@ class Game:
     voice_channel_team_one_id: Optional[int] = None
     voice_channel_team_two_id: Optional[int] = None
     public_game_message_id: Optional[int] = None
+    server_ip: Optional[str] = ""
+    server_port: Optional[str] = ""
+    server_password: Optional[str] = ""
+    hltv_ip: Optional[str] = ""
+    hltv_port: Optional[str] = ""
+    hltv_password: Optional[str] = ""
+    rcon_password: Optional[str] = ""

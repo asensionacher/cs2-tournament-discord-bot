@@ -64,18 +64,10 @@ async def on_ready():
 @discord.ext.commands.has_role("admin")
 async def help(ctx):
     """Show help information based on user role"""
-    guild = ctx.guild
     
-    if not admin_role:
-        help_msg = ("🔧 **Initial Setup**\n"
+    help_msg = ("🔧 **Initial Setup**\n"
                 "• Send `!start` to create all necessary roles, categories and channels\n")
-        await ctx.send(help_msg)
-        return
-
-    # Check if user has admin role
-    if admin_role not in ctx.author.roles:
-        await ctx.send("❌ You need the Admin role to view administrator commands")
-        return
+    await ctx.send(help_msg)
 
     help_msg = (
         "🎮 **CS2 Tournament Bot Help**\n\n"
@@ -105,6 +97,16 @@ async def help(ctx):
         "• `!pick <map_name>` - Pick a map (execute in game channel)\n"
         "• `!result <map_name> <team_number>` - Set map winner (1 or 2)\n"
         "• `!summary` - Show game status\n\n"
+
+        "**Game Channel Management:**\n"
+        "• `!set_game_server_setting <key> <value>` - Set game server settings\n"
+        "• `!set_game_ip <game_id> <ip>` - Set server IP\n"
+        "• `!set_game_port <game_id> <port>` - Set server port\n"
+        "• `!set_game_password <game_id> <password>` - Set server password\n"
+        "• `!set_hltv_ip <game_id> <ip>` - Set HLTV IP\n"
+        "• `!set_hltv_port <game_id> <port>` - Set HLTV port\n"
+        "• `!set_hltv_password <game_id> <password>` - Set HLTV password\n"
+        "• `!set_rcon_password <game_id> <password>` - Set RCON password\n\n"
 
         "**Admin Testing:**\n"
         "• `!mock_teams` - Create mock teams until 16 teams\n"
@@ -610,6 +612,35 @@ async def set_game_type(ctx, round_name:str, game_type:str):
 
 @bot.command()
 @discord.ext.commands.has_role("admin")
+async def set_game_server_setting(ctx, key:str, value:str):
+    """
+    Set a game server setting, for example, if MatchZy is used or dathost
+    Format: !set_game_server_settings <key> <value>
+        - key: Single word (e.g., "matchzy")
+        - value: Single word (e.g., "true")
+    """
+    try:
+        if not ctx.channel.name == "admin":
+            await ctx.send("Must be executed from admin channel")
+            return
+        else:
+            if key not in ["matchzy", "dathost"]:
+                await ctx.send("❌ Invalid key! Must be one of: matchzy, dathost")
+                return
+            if value not in ["true", "false"]:
+                await ctx.send("❌ Invalid value! Must be one of: true, false")
+                return
+            setting = await _create_server_setting(ctx, key=key, value=value)
+            if setting is None:
+                await ctx.send("❌ Error creating setting")
+                return
+            await ctx.send(f"Game server setting {key} set to {value}")
+    except Exception as e:
+        logging.error(f"Error during set_game_server_settings command: {e}")
+        await ctx.send(f"❌ Error during set_game_server_settings command: {e}")
+
+@bot.command()
+@discord.ext.commands.has_role("admin")
 async def get_settings(ctx):
     """
     Get all settings for the server.
@@ -697,6 +728,196 @@ async def im_all_teams_captain(ctx):
     except Exception as e:
         logging.error(f"Error during im_all_teams_captain command: {e}")
         await ctx.send(f"❌ Error during im_all_teams_captain command: {e}")
+
+@bot.command()
+@discord.ext.commands.has_role("admin")
+async def set_game_ip(ctx, game_id:int, ip:str):
+    """
+    Set the game ip for a game.
+    Format: !set_game_ip <game_id> <ip>
+        - game_id: Int (e.g., 123456)
+        - ip: Single word (e.g., 192.168.10.10)
+    """
+    try:
+        if not ctx.channel.name == "admin":
+            await ctx.send("Must be executed from admin channel")
+            return
+        else:
+            game = bot.game_service.get_game_by_id(game_id=game_id)
+            if game is None:
+                await ctx.send(f"❌ Game with id {game_id} not found.")
+                return
+            game.server_ip = ip
+            bot.game_service.update_game(game=game)
+            await ctx.send(f"Game ip set to ||{ip}|| for game {game_id}.")
+            admin_channel = bot.get_channel(game.admin_game_channel_id)
+            if admin_channel is None:
+                await ctx.send(f"❌ Admin channel for game {game_id} not found.")
+                return
+            await admin_channel.send(f"Game ip set to ||{ip}|| for game {game_id}.")
+    except Exception as e:
+        logging.error(f"Error during set_game_ip command: {e}")
+        await ctx.send(f"❌ Error during set_game_ip command: {e}")
+
+@bot.command()
+@discord.ext.commands.has_role("admin")
+async def set_game_port(ctx, game_id:int, port:str):
+    """
+    Set the game port for a game.
+    Format: !set_game_port <game_id> <port>
+        - game_id: Int (e.g., 123456)
+        - port: Str (e.g., 27015)
+    """
+    try:
+        if not ctx.channel.name == "admin":
+            await ctx.send("Must be executed from admin channel")
+            return
+        else:
+            game = bot.game_service.get_game_by_id(game_id=game_id)
+            if game is None:
+                await ctx.send(f"❌ Game with id {game_id} not found.")
+                return
+            game.server_port = port
+            bot.game_service.update_game(game=game)
+            await ctx.send(f"Game port set to ||{port}|| for game {game_id}.")
+            admin_channel = bot.get_channel(game.admin_game_channel_id)
+            if admin_channel is None:
+                await ctx.send(f"❌ Admin channel for game {game_id} not found.")
+                return
+            await admin_channel.send(f"Game port set to ||{port}|| for game {game_id}.")
+    except Exception as e:
+        logging.error(f"Error during set_game_port command: {e}")
+        await ctx.send(f"❌ Error during set_game_port command: {e}")
+
+@bot.command()
+@discord.ext.commands.has_role("admin")
+async def set_game_password(ctx, game_id:int, password:str):
+    """
+    Set the game password for a game.
+    Format: !set_game_password <game_id> <password>
+        - game_id: Int (e.g., 123456)
+        - password: Single word (e.g., mypassword)
+    """
+    try:
+        if not ctx.channel.name == "admin":
+            await ctx.send("Must be executed from admin channel")
+            return
+        else:
+            game = bot.game_service.get_game_by_id(game_id=game_id)
+            if game is None:
+                await ctx.send(f"❌ Game with id {game_id} not found.")
+                return
+            game.server_password = password
+            bot.game_service.update_game(game=game)
+            await ctx.send(f"Game password set to ||{password}|| for game {game_id}.")
+            admin_channel = bot.get_channel(game.admin_game_channel_id)
+            if admin_channel is None:
+                await ctx.send(f"❌ Admin channel for game {game_id} not found.")
+                return
+            await admin_channel.send(f"Game password set to ||{password}|| for game {game_id}.")
+    except Exception as e:
+        logging.error(f"Error during set_game_password command: {e}")
+        await ctx.send(f"❌ Error during set_game_password command: {e}")
+
+@bot.command()
+@discord.ext.commands.has_role("admin")
+async def set_hltv_ip(ctx, game_id:int, ip:str):
+    """
+    Set the hltv ip for a game.
+    Format: !set_hltv_ip <game_id> <ip>
+        - game_id: Int (e.g., 123456)
+        - ip: Single word (e.g., 192.168.10.11)
+    """
+    try:
+        if not ctx.channel.name == "admin":
+            await ctx.send("Must be executed from admin channel")
+            return
+        else:
+            game = bot.game_service.get_game_by_id(game_id=game_id)
+            if game is None:
+                await ctx.send(f"❌ Game with id {game_id} not found.")
+                return
+            game.hltv_ip = ip
+            bot.game_service.update_game(game=game)
+            await ctx.send(f"Hltv ip set to ||{ip}|| for game {game_id}.")
+    except Exception as e:
+        logging.error(f"Error during set_hltv_ip command: {e}")
+        await ctx.send(f"❌ Error during set_hltv_ip command: {e}")
+
+@bot.command()
+@discord.ext.commands.has_role("admin")
+async def set_hltv_port(ctx, game_id:int, port:str):
+    """
+    Set the hltv port for a game.
+    Format: !set_hltv_port <game_id> <port>
+        - game_id: Int (e.g., 123456)
+        - port: Str (e.g., 27020)
+    """
+    try:
+        if not ctx.channel.name == "admin":
+            await ctx.send("Must be executed from admin channel")
+            return
+        else:
+            game = bot.game_service.get_game_by_id(game_id=game_id)
+            if game is None:
+                await ctx.send(f"❌ Game with id {game_id} not found.")
+                return
+            game.hltv_port = port
+            bot.game_service.update_game(game=game)
+            await ctx.send(f"Hltv port set to ||{port}|| for game {game_id}.")
+    except Exception as e:
+        logging.error(f"Error during set_hltv_port command: {e}")
+        await ctx.send(f"❌ Error during set_hltv_port command: {e}")
+
+@bot.command()
+@discord.ext.commands.has_role("admin")
+async def set_hltv_password(ctx, game_id:int, password:str):
+    """
+    Set the hltv password for a game.
+    Format: !set_hltv_password <game_id> <password>
+        - game_id: Int (e.g., 123456)
+        - password: Single word (e.g., mypassword)
+    """
+    try:
+        if not ctx.channel.name == "admin":
+            await ctx.send("Must be executed from admin channel")
+            return
+        else:
+            game = bot.game_service.get_game_by_id(game_id=game_id)
+            if game is None:
+                await ctx.send(f"❌ Game with id {game_id} not found.")
+                return
+            game.hltv_password = password
+            bot.game_service.update_game(game=game)
+            await ctx.send(f"Hltv password set to ||{password}|| for game {game_id}.")
+    except Exception as e:
+        logging.error(f"Error during set_hltv_password command: {e}")
+        await ctx.send(f"❌ Error during set_hltv_password command: {e}")
+
+@bot.command()
+@discord.ext.commands.has_role("admin")
+async def set_rcon_password(ctx, game_id:int, password:str):
+    """
+    Set the rcon password for a game.
+    Format: !set_rcon_password <game_id> <password>
+        - game_id: Int (e.g., 123456)
+        - password: Single word (e.g., mypassword)
+    """
+    try:
+        if not ctx.channel.name == "admin":
+            await ctx.send("Must be executed from admin channel")
+            return
+        else:
+            game = bot.game_service.get_game_by_id(game_id=game_id)
+            if game is None:
+                await ctx.send(f"❌ Game with id {game_id} not found.")
+                return
+            game.rcon_password = password
+            bot.game_service.update_game(game=game)
+            await ctx.send(f"Rcon password set to ||{password}|| for game {game_id}.")
+    except Exception as e:
+        logging.error(f"Error during set_rcon_password command: {e}")
+        await ctx.send(f"❌ Error during set_rcon_password command: {e}")
 
 def setup_logging():
     """Configure logging with file rotation"""
@@ -1379,6 +1600,18 @@ async def _execute_veto(ctx, game: Game, game_to_wins:str, map_name:str):
         bot.pick_service.create_pick(pick)
         await admin_channel.send(f"Decider will be {remaining_maps[0]}.")
         await _create_game_maps(ctx, game=game)
+        text_for_admin = f"""
+            Admin, if you decided to use "MatchZy or dathost and you want the bot to automatically manage the game, please from the admin channel
+            use the commands:\n
+            - `!set_game_ip {game.id} <ip>` for setting the ip of the game. The \"{game.id}\" value is the id of the current game. This value will be sent to the game admin channel.\n
+            - `!set_game_port {game.id} <port>` for setting the port of the game. The \"{game.id}\" value is the id of the current game. This value will be sent to the game admin channel.\n
+            - `!set_game_password {game.id} <password>` for setting the password of the game. The \"{game.id}\" value is the id of the current game. This value will be sent to the game admin channel.\n
+            - `!set_hltv_ip {game.id} <ip>` for setting the ip of the hltv. The \"{game.id}\" value is the id of the current game. Set this only if HLTV is on.\n
+            - `!set_hltv_port {game.id} <port>` for setting the port of the hltv. The \"{game.id}\" value is the id of the current game. Set this only if HLTV is on.\n
+            - `!set_hltv_password {game.id} <password>` for setting the password of the hltv. The \"{game.id}\" value is the id of the current game. Set this only if HLTV is on.\n
+            - `!set_rcon_password {game.id} <password>` for setting the rcon password of the game. The \"{game.id}\" value is the id of the current game. Set this only if you want the bot to manage the game.\n
+        """
+        await admin_channel.send(text_for_admin)
         
     public_channel = bot.get_channel(game.game_channel_id)
     embed = await _game_embed(ctx, game)
