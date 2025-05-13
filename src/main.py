@@ -1612,7 +1612,11 @@ async def _execute_veto(ctx, game: Game, game_to_wins:str, map_name:str):
             - `!set_rcon_password {game.id} <password>` for setting the rcon password of the game. The \"{game.id}\" value is the id of the current game. Set this only if you want the bot to manage the game.\n
         """
         await admin_channel.send(text_for_admin)
-        
+        # TODO: Create matchzy and dathost commands
+        # TODO: Create !start_match command
+        # TODO: when start_match is called, if matchzy or dathost is used
+        # and rcon_password or dathost_API is set, send commands to the game,
+        # else, send message that the admin have to start the game manually
     public_channel = bot.get_channel(game.game_channel_id)
     embed = await _game_embed(ctx, game)
     if public_channel:
