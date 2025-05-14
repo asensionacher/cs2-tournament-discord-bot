@@ -42,13 +42,6 @@ CREATE TABLE IF NOT EXISTS game (
     voice_channel_team_one_id INTEGER NOT NULL,
     voice_channel_team_two_id INTEGER NOT NULL,
     public_game_message_id INTEGER NOT NULL,
-    server_ip TEXT DEFAULT '',
-    server_port TEXT DEFAULT '',
-    server_password TEXT DEFAULT '',
-    hltv_ip TEXT DEFAULT '',
-    hltv_port TEXT DEFAULT '',
-    hltv_password TEXT DEFAULT '',
-    rcon_password TEXT DEFAULT '',
     FOREIGN KEY (team_one_id) REFERENCES team(id) ON DELETE CASCADE,
     FOREIGN KEY (team_two_id) REFERENCES team(id) ON DELETE CASCADE
 );
@@ -82,6 +75,7 @@ CREATE TABLE IF NOT EXISTS game_map (
     guild_id INTEGER NOT NULL,
     game_number INTEGER NOT NULL,   
     map_name TEXT NOT NULL,
+    dathost_match_id TEXT NOT NULL,
     FOREIGN KEY (game_id) REFERENCES game(id) ON DELETE CASCADE,
     FOREIGN KEY (team_id_winner) REFERENCES team(id) ON DELETE CASCADE
 );

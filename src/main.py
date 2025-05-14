@@ -1,3 +1,6 @@
+# TODO: Replace result instead of map_name get the first that status is not finished
+
+import json
 import os
 import logging
 from logging.handlers import RotatingFileHandler
@@ -614,9 +617,9 @@ async def set_game_type(ctx, round_name:str, game_type:str):
 @discord.ext.commands.has_role("admin")
 async def set_game_server_setting(ctx, key:str, value:str):
     """
-    Set a game server setting, for example, if MatchZy is used or dathost
+    Set a game server setting, for example, if dathost is used or not.
     Format: !set_game_server_settings <key> <value>
-        - key: Single word (e.g., "matchzy")
+        - key: Single word (e.g., "dathost")
         - value: Single word (e.g., "true")
     """
     try:
@@ -624,8 +627,8 @@ async def set_game_server_setting(ctx, key:str, value:str):
             await ctx.send("Must be executed from admin channel")
             return
         else:
-            if key not in ["matchzy", "dathost"]:
-                await ctx.send("❌ Invalid key! Must be one of: matchzy, dathost")
+            if key not in [ "dathost"]:
+                await ctx.send("❌ Invalid key! Must be one of: dathost")
                 return
             if value not in ["true", "false"]:
                 await ctx.send("❌ Invalid value! Must be one of: true, false")
@@ -731,193 +734,31 @@ async def im_all_teams_captain(ctx):
 
 @bot.command()
 @discord.ext.commands.has_role("admin")
-async def set_game_ip(ctx, game_id:int, ip:str):
+async def start_map(ctx):
     """
-    Set the game ip for a game.
-    Format: !set_game_ip <game_id> <ip>
-        - game_id: Int (e.g., 123456)
-        - ip: Single word (e.g., 192.168.10.10)
+    Start the current map for the current game. 
+    Format: !start_map
     """
-    try:
-        if not ctx.channel.name == "admin":
-            await ctx.send("Must be executed from admin channel")
-            return
-        else:
-            game = bot.game_service.get_game_by_id(game_id=game_id)
-            if game is None:
-                await ctx.send(f"❌ Game with id {game_id} not found.")
-                return
-            game.server_ip = ip
-            bot.game_service.update_game(game=game)
-            await ctx.send(f"Game ip set to ||{ip}|| for game {game_id}.")
-            admin_channel = bot.get_channel(game.admin_game_channel_id)
-            if admin_channel is None:
-                await ctx.send(f"❌ Admin channel for game {game_id} not found.")
-                return
-            await admin_channel.send(f"Game ip set to ||{ip}|| for game {game_id}.")
-    except Exception as e:
-        logging.error(f"Error during set_game_ip command: {e}")
-        await ctx.send(f"❌ Error during set_game_ip command: {e}")
-
-@bot.command()
-@discord.ext.commands.has_role("admin")
-async def set_game_port(ctx, game_id:int, port:str):
-    """
-    Set the game port for a game.
-    Format: !set_game_port <game_id> <port>
-        - game_id: Int (e.g., 123456)
-        - port: Str (e.g., 27015)
-    """
-    try:
-        if not ctx.channel.name == "admin":
-            await ctx.send("Must be executed from admin channel")
-            return
-        else:
-            game = bot.game_service.get_game_by_id(game_id=game_id)
-            if game is None:
-                await ctx.send(f"❌ Game with id {game_id} not found.")
-                return
-            game.server_port = port
-            bot.game_service.update_game(game=game)
-            await ctx.send(f"Game port set to ||{port}|| for game {game_id}.")
-            admin_channel = bot.get_channel(game.admin_game_channel_id)
-            if admin_channel is None:
-                await ctx.send(f"❌ Admin channel for game {game_id} not found.")
-                return
-            await admin_channel.send(f"Game port set to ||{port}|| for game {game_id}.")
-    except Exception as e:
-        logging.error(f"Error during set_game_port command: {e}")
-        await ctx.send(f"❌ Error during set_game_port command: {e}")
-
-@bot.command()
-@discord.ext.commands.has_role("admin")
-async def set_game_password(ctx, game_id:int, password:str):
-    """
-    Set the game password for a game.
-    Format: !set_game_password <game_id> <password>
-        - game_id: Int (e.g., 123456)
-        - password: Single word (e.g., mypassword)
-    """
-    try:
-        if not ctx.channel.name == "admin":
-            await ctx.send("Must be executed from admin channel")
-            return
-        else:
-            game = bot.game_service.get_game_by_id(game_id=game_id)
-            if game is None:
-                await ctx.send(f"❌ Game with id {game_id} not found.")
-                return
-            game.server_password = password
-            bot.game_service.update_game(game=game)
-            await ctx.send(f"Game password set to ||{password}|| for game {game_id}.")
-            admin_channel = bot.get_channel(game.admin_game_channel_id)
-            if admin_channel is None:
-                await ctx.send(f"❌ Admin channel for game {game_id} not found.")
-                return
-            await admin_channel.send(f"Game password set to ||{password}|| for game {game_id}.")
-    except Exception as e:
-        logging.error(f"Error during set_game_password command: {e}")
-        await ctx.send(f"❌ Error during set_game_password command: {e}")
-
-@bot.command()
-@discord.ext.commands.has_role("admin")
-async def set_hltv_ip(ctx, game_id:int, ip:str):
-    """
-    Set the hltv ip for a game.
-    Format: !set_hltv_ip <game_id> <ip>
-        - game_id: Int (e.g., 123456)
-        - ip: Single word (e.g., 192.168.10.11)
-    """
-    try:
-        if not ctx.channel.name == "admin":
-            await ctx.send("Must be executed from admin channel")
-            return
-        else:
-            game = bot.game_service.get_game_by_id(game_id=game_id)
-            if game is None:
-                await ctx.send(f"❌ Game with id {game_id} not found.")
-                return
-            game.hltv_ip = ip
-            bot.game_service.update_game(game=game)
-            await ctx.send(f"Hltv ip set to ||{ip}|| for game {game_id}.")
-    except Exception as e:
-        logging.error(f"Error during set_hltv_ip command: {e}")
-        await ctx.send(f"❌ Error during set_hltv_ip command: {e}")
-
-@bot.command()
-@discord.ext.commands.has_role("admin")
-async def set_hltv_port(ctx, game_id:int, port:str):
-    """
-    Set the hltv port for a game.
-    Format: !set_hltv_port <game_id> <port>
-        - game_id: Int (e.g., 123456)
-        - port: Str (e.g., 27020)
-    """
-    try:
-        if not ctx.channel.name == "admin":
-            await ctx.send("Must be executed from admin channel")
-            return
-        else:
-            game = bot.game_service.get_game_by_id(game_id=game_id)
-            if game is None:
-                await ctx.send(f"❌ Game with id {game_id} not found.")
-                return
-            game.hltv_port = port
-            bot.game_service.update_game(game=game)
-            await ctx.send(f"Hltv port set to ||{port}|| for game {game_id}.")
-    except Exception as e:
-        logging.error(f"Error during set_hltv_port command: {e}")
-        await ctx.send(f"❌ Error during set_hltv_port command: {e}")
-
-@bot.command()
-@discord.ext.commands.has_role("admin")
-async def set_hltv_password(ctx, game_id:int, password:str):
-    """
-    Set the hltv password for a game.
-    Format: !set_hltv_password <game_id> <password>
-        - game_id: Int (e.g., 123456)
-        - password: Single word (e.g., mypassword)
-    """
-    try:
-        if not ctx.channel.name == "admin":
-            await ctx.send("Must be executed from admin channel")
-            return
-        else:
-            game = bot.game_service.get_game_by_id(game_id=game_id)
-            if game is None:
-                await ctx.send(f"❌ Game with id {game_id} not found.")
-                return
-            game.hltv_password = password
-            bot.game_service.update_game(game=game)
-            await ctx.send(f"Hltv password set to ||{password}|| for game {game_id}.")
-    except Exception as e:
-        logging.error(f"Error during set_hltv_password command: {e}")
-        await ctx.send(f"❌ Error during set_hltv_password command: {e}")
-
-@bot.command()
-@discord.ext.commands.has_role("admin")
-async def set_rcon_password(ctx, game_id:int, password:str):
-    """
-    Set the rcon password for a game.
-    Format: !set_rcon_password <game_id> <password>
-        - game_id: Int (e.g., 123456)
-        - password: Single word (e.g., mypassword)
-    """
-    try:
-        if not ctx.channel.name == "admin":
-            await ctx.send("Must be executed from admin channel")
-            return
-        else:
-            game = bot.game_service.get_game_by_id(game_id=game_id)
-            if game is None:
-                await ctx.send(f"❌ Game with id {game_id} not found.")
-                return
-            game.rcon_password = password
-            bot.game_service.update_game(game=game)
-            await ctx.send(f"Rcon password set to ||{password}|| for game {game_id}.")
-    except Exception as e:
-        logging.error(f"Error during set_rcon_password command: {e}")
-        await ctx.send(f"❌ Error during set_rcon_password command: {e}")
+    channel_id = ctx.channel.id
+    game = bot.game_service.get_game_by_admin_game_channel_id(admin_game_channel_id=channel_id)
+    if game is None:
+        await ctx.send("This must be sent from a admin game channel.")
+        return
+    
+    game_map = bot.game_map_service.get_first_not_finished_game_map(game_id=game.id)
+    if game_map is None:
+        await ctx.send("No maps found for this game or all maps have been finished.")
+        return
+    if game_map.status == "not_started":
+        dathost_setting = bot.setting_service.get_setting_by_key(key="dathost", guild_id=ctx.guild.id)
+        
+        if dathost_setting is not None:
+            # TODO: Create dathost server with random password (https://dathost.net/reference/post_game_servers)
+            # TODO: Check if webhook is setted, maybe create another container for it
+            # TODO: Create current map (https://dathost.net/reference/post_api-0-1-cs2-matches)
+            # TODO: Set game map status to "started"
+            print("TEST")
+            
 
 def setup_logging():
     """Configure logging with file rotation"""
@@ -1599,9 +1440,8 @@ async def _execute_veto(ctx, game: Game, game_to_wins:str, map_name:str):
         pick = Pick(order_pick=all_order + 2, game_id=game.id, team_id=-1, map_name=remaining_maps[0], guild_id=guild.id)
         bot.pick_service.create_pick(pick)
         await admin_channel.send(f"Decider will be {remaining_maps[0]}.")
-        await _create_game_maps(ctx, game=game)
         text_for_admin = f"""
-            Admin, if you decided to use "MatchZy or dathost and you want the bot to automatically manage the game, please from the admin channel
+            Admin, if you decided to use dathost and you want the bot to automatically manage the game, please from the admin channel
             use the commands:\n
             - `!set_game_ip {game.id} <ip>` for setting the ip of the game. The \"{game.id}\" value is the id of the current game. This value will be sent to the game admin channel.\n
             - `!set_game_port {game.id} <port>` for setting the port of the game. The \"{game.id}\" value is the id of the current game. This value will be sent to the game admin channel.\n
@@ -1612,11 +1452,6 @@ async def _execute_veto(ctx, game: Game, game_to_wins:str, map_name:str):
             - `!set_rcon_password {game.id} <password>` for setting the rcon password of the game. The \"{game.id}\" value is the id of the current game. Set this only if you want the bot to manage the game.\n
         """
         await admin_channel.send(text_for_admin)
-        # TODO: Create matchzy and dathost commands
-        # TODO: Create !start_match command
-        # TODO: when start_match is called, if matchzy or dathost is used
-        # and rcon_password or dathost_API is set, send commands to the game,
-        # else, send message that the admin have to start the game manually
     public_channel = bot.get_channel(game.game_channel_id)
     embed = await _game_embed(ctx, game)
     if public_channel:
@@ -1625,6 +1460,66 @@ async def _execute_veto(ctx, game: Game, game_to_wins:str, map_name:str):
             await msg.edit(embed=embed)
         except Exception as e:
             await admin_channel.send(f"⚠️ Veto added but failed to update display: {e}")
+
+async def _create_dathost_params(ctx, game: Game) -> str:
+    """
+    Creates the dathost params for the game
+    """
+
+    # Get all values of dathost
+    team_one = bot.team_service.get_team_by_id(team_id=game.team_one_id)
+    team_two = bot.team_service.get_team_by_id(team_id=game.team_two_id)
+    match_id = game.id
+    players_team_1 = bot.player_service.get_players_by_team_id(team_id=team_one.id)
+    players_team_2 = bot.player_service.get_players_by_team_id(team_id=team_two.id)
+    game_maps = bot.game_map_service.get_all_game_maps_by_game(guild_id=ctx.guild.id, game_id=game.id)
+    hostname = f"{game.game_type}: {team_one.name} vs {team_two.name} #{match_id}"
+    
+    # TODO: Follow dathost format https://dathost.net/reference/post_api-0-1-cs2-matches
+
+    # file = {}
+    # file['matchid'] = match_id
+
+    # file['team1'] = {}
+    # file['team1']['name'] = team_one.name
+    # file['team1']['players'] = {}
+    # for player in players_team_1:
+    #     file['team1']['players'][player.steamid] = player.nickname
+
+    # file['team2'] = {}
+    # file['team2']['name'] = team_two.name
+    # file['team2']['players'] = {}
+    # for player in players_team_2:
+    #     file['team2']['players'][player.steamid] = player.nickname
+    # file['num_maps'] = len(game_maps)
+    # file['maplist'] = []
+    # for game_map in game_maps:
+    #     file['maplist'].append(game_map.map_name)
+    # file['map_sides'] = []
+    # file['map_sides'].append('team1_ct')
+    # file['map_sides'].append('team2_ct')
+    # file['map_sides'].append('knife')
+    # file['clinch_series'] = True
+    # file['players_per_team'] = 5
+    # file['cvars'] = {}
+    # file['cvars']['hostname'] = hostname
+    # file['cvars']['mp_friendlyfire'] = 1
+
+    # # Get file
+    # json_data = json.dumps(file)
+    # # beautify json data
+    # json_data = json.dumps(json.loads(json_data), indent=4)
+    # # send json data as a file to game admin channel
+    # file_name = f"matchzy_{game.id}.json"
+    # # write file into a temp directory
+    # temp_dir = os.path.join(os.getcwd(), "temp")
+    # if not os.path.exists(temp_dir):
+    #     os.makedirs(temp_dir)
+    # file_path = os.path.join(temp_dir, file_name)
+    # with open(file_path, "w") as f:
+    #     f.write(json_data)
+    # # return file path
+    # return file_path
 
 async def _execute_pick(ctx, game: Game, game_to_wins:str, map_name:str):
     """
@@ -1855,6 +1750,7 @@ async def _set_result(ctx, game: Game, team_number: int, map_name: str):
     
     if game_winner is not None:
         await admin_channel.send(f"The winner of the game is {game_winner.name}.")
+        # TODO: Delete server from dathost
         game.team_winner = game_winner.id
         bot.game_service.update_game(game=game)
         await _game_summary(ctx, game)
