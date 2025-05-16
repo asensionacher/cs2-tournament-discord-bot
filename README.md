@@ -23,14 +23,18 @@ This bot is in a very early stage, so keep in mind that bugs and missing feature
 - [ ] Adding more teams, now only 16 teams can be added.
 - [ ] Add RCON commands for automatically starting matches using [MatchZy match_setup](https://shobhit-pathak.github.io/MatchZy/match_setup/).
 - [ ] Receive [MatchZy Events & Forwards](https://shobhit-pathak.github.io/MatchZy/events_and_forwards/) for automatically set map and games winners.
-- [ ] Auto host games in [dathost](https://dathost.net/) using their API.
-- [ ] Timer for getting game information in [dathost](https://dathost.net/) server until map is over.
+- [x] Auto host games in [dathost](https://dathost.net/) using their API (needs testing).
+- [ ] Receive [dathost webhooks](https://dathost.readme.io/docs/cs2-match-api-webhooks) for automatically set map and games winners.
+- [ ] Share stats of each map.
 
 ## How to use
 
 ### Create a Discord bot and retrieve the token
 
 Follow [https://discord.com/developers/docs/quick-start/getting-started](https://discord.com/developers/docs/quick-start/getting-started) for creating a Discord application and retrieving the token. Once you have the token, create an `.env` file like [sample](./.env.sample) provided and change the mock token for yours.
+
+> [!WARNING]  
+> I strongly recommend to create private bots for not exposing your username and password of da
 
 ### Deploying using docker compose
 

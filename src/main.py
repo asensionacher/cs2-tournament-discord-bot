@@ -7,9 +7,10 @@ from logging.handlers import RotatingFileHandler
 import datetime
 from dotenv import load_dotenv
 import random
-
+from fastapi import FastAPI
 import discord
 from discord.ext import commands
+from discord.ui import View, Button
 import re
 
 import requests
@@ -49,6 +50,7 @@ swiss-round and knock-out stage.
 intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
+app = FastAPI()
 
 bot = commands.Bot(
     command_prefix=os.environ.get("BOT_PREFIX", "!"),
@@ -56,6 +58,51 @@ bot = commands.Bot(
     intents=intents,
     help_command=None
 )
+
+# Buttons handler
+
+# This is the function that will be called when a button is pressed
+async def executebutton(ctx, button_content, game: Game):
+    is_pick = "✅" in button_content
+    map_name = button_content.replace("❌", "").replace("✅", "")
+    game_to_wins = await _get_game_to_wins(ctx, game=game)
+    if is_pick:
+        await _execute_pick(ctx, game_to_wins=game_to_wins, game=game, map_name=map_name)
+    else:
+        await ctx.send("vetoing")
+        await _execute_veto(ctx, game_to_wins=game_to_wins, game=game, map_name=map_name) 
+
+# Custom view for the buttons
+class ButtonPickAndBanView(View):
+    def __init__(self, ctx, remaining_maps: list, type: str, game: Game):
+        super().__init__()
+        self.ctx = ctx
+        self.game = game
+
+        # Add buttons to the view
+        if type == "veto":
+            prefix = "❌"
+        elif type == "pick":
+            prefix = "✅"
+        for map_name in remaining_maps:
+            self.add_item(ButtonPickAndBanHandler(label=f"{prefix}{map_name}", ctx=ctx, game=game))
+
+# Custom button handler
+class ButtonPickAndBanHandler(Button):
+    def __init__(self, label, ctx, game: Game):
+        super().__init__(label=label, style=discord.ButtonStyle.primary)
+        self.ctx = ctx
+        self.label = label
+        self.game = game
+
+    async def callback(self, interaction: discord.Interaction):
+        # Optionally, defer the interaction
+        print(f"Button {self.label}")
+        await interaction.response.defer()
+        # Simulate "ctx" with the original one from command
+        await self.ctx.send(f"Button {self.label} pressed!")
+        await executebutton(self.ctx, self.label, game=self.game)
+
 
 @bot.event
 async def on_ready():
@@ -79,8 +126,7 @@ async def help(ctx):
         "• `!start` - Initialize server setup (roles, categories, channels)\n\n"
 
         "**Game Settings:**\n"
-        "• `!set_game_type <round_name> <game_type>` - Set game type for a round\n"
-        "• `!get_settings` - Get all settings for the server\n"
+        "• `!get_settings` - Get all settings for the server\n\n"
         
         "**Team Management:**\n"
         "• `!create_team <team_name>` - Create a new team\n"
@@ -98,17 +144,8 @@ async def help(ctx):
         "• `!veto <map_name>` - Veto a map (execute in game channel)\n"
         "• `!pick <map_name>` - Pick a map (execute in game channel)\n"
         "• `!result <map_name> <team_number>` - Set map winner (1 or 2)\n"
-        "• `!summary` - Show game status\n\n"
-
-        "**Game Channel Management:**\n"
-        "• `!set_game_server_setting <key> <value>` - Set game server settings\n"
-        "• `!set_game_ip <game_id> <ip>` - Set server IP\n"
-        "• `!set_game_port <game_id> <port>` - Set server port\n"
-        "• `!set_game_password <game_id> <password>` - Set server password\n"
-        "• `!set_hltv_ip <game_id> <ip>` - Set HLTV IP\n"
-        "• `!set_hltv_port <game_id> <port>` - Set HLTV port\n"
-        "• `!set_hltv_password <game_id> <password>` - Set HLTV password\n"
-        "• `!set_rcon_password <game_id> <password>` - Set RCON password\n\n"
+        "• `!summary` - Show game status\n"
+        "• `!start_map` - Start the current map for the current game. IF IT IS EXECUTED TWICE BEFORE THE GAME HAS BEEN FINISHED THIS WILL RESTART THE MATCH.\n\n"
 
         "**Admin Testing:**\n"
         "• `!mock_teams` - Create mock teams until 16 teams\n"
@@ -310,10 +347,10 @@ async def all_teams_created(ctx):
     guild = ctx.guild
     all_teams_created_setting = bot.setting_service.get_setting_by_name(
         setting_key="all_teams_created", guild_id=guild.id)
-    if all_teams_created_setting is not None:
-        if all_teams_created_setting.value == "true":
-            await ctx.send("Tournament already started!")
-            return
+    # if all_teams_created_setting is not None:
+    #     if all_teams_created_setting.value == "true":
+    #         await ctx.send("Tournament already started!")
+    #         return
     if not ctx.channel.name == "admin":
         await ctx.send("Must be executed from admin channel")
         return
@@ -1126,7 +1163,7 @@ async def _create_game(ctx, game: Game, category: discord.CategoryChannel):
     admin_channel_name = f"ADMINS {team_one.name} vs {team_two.name}"
     admin_channel = await _create_text_channel(ctx, channel_name=admin_channel_name, overwrites=admin_overwrites, category=category)
     await admin_channel.send(f"This channel will be used for communicating between org and teams on this game, remember that only admins and users with role {team_one.name}_captain and {team_two.name}_captain can write in this channel.")
-    await admin_channel.send(f"Time of picks and bans, {team_one.name} captain please send your veto with the command `!veto <mapname>`")
+    await admin_channel.send(f"Time of picks and bans, {team_one.name} captain please click a button from below for vetoing a map.")
 
     # Create public channel
     public_overwrites = {
@@ -1167,8 +1204,15 @@ async def _create_game(ctx, game: Game, category: discord.CategoryChannel):
     game.public_game_message_id = msg.id
     game.voice_channel_team_one_id = voice1.id
     game.voice_channel_team_two_id = voice2.id
+    game.admin_pick_veto_button_message_id = -1
 
-    bot.game_service.create_game(game)
+    game.id = bot.game_service.create_game(game)
+
+    view = ButtonPickAndBanView(ctx, remaining_maps=bot.MAP_POOL, type="veto", game=game)
+    msg = await admin_channel.send("Veto a map:", view=view)
+    game.admin_pick_veto_button_message_id = msg.id
+    view.game = game
+    bot.game_service.update_game(game)
 
 async def _create_games(ctx, game_type: str):
     """
@@ -1319,6 +1363,7 @@ async def _execute_veto(ctx, game: Game, game_to_wins:str, map_name:str):
     Executes a veto on a game
     """
     guild = ctx.guild
+    next_step = ""
 
     admin_channel = bot.get_channel(game.admin_game_channel_id)
 
@@ -1358,30 +1403,40 @@ async def _execute_veto(ctx, game: Game, game_to_wins:str, map_name:str):
         return  
     
     veto = Veto(order_veto=all_order + 1, game_id=game.id, team_id=current_team.id, map_name=map_name, guild_id=guild.id)
+    map_names.append(map_name)
+    remaining_maps = [map_ for map_ in bot.MAP_POOL if map_ not in map_names]
     if game_to_wins == "bo1":
         await admin_channel.send(f"{current_team.name} vetoed {map_name}")
         if all_order + 1 < 6: # Still vetoing
-            await admin_channel.send(f"{next_team.name} time to veto.\nUse the command `!veto <map_name>` for vetoing a map.")
+            await admin_channel.send(f"{next_team.name} time to veto.\nClick a button for vetoing a map.")
     elif game_to_wins == "bo3":
         if all_order == 2 or all_order == 3: # pick turn
             await admin_channel.send(f"Is pick time!")
             return
         await admin_channel.send(f"{team_one.name} vetoed {map_name}")
         if all_order + 1 == 2 or all_order + 1 == 3: # time to pick
-            await admin_channel.send(f"{next_team.name} time to pick.\nUse the command `!pick <map_name>` for picking a map.")
+            text = f"{next_team.name} time to pick.\nClick a button for picking a map."
+            prefix = "✅"
+            next_step = "Pick"
         elif all_order + 1 < 6:
-            await admin_channel.send(f"{next_team.name} time to veto.\nUse the command `!veto <map_name>` for vetoing a map.")
+            text = f"{next_team.name} time to veto.\nClick a button for vetoing a map."
+            prefix = "❌"
+            next_step = "Veto"
     elif game_to_wins == "bo5":
         if all_order + 1 > 2:
             await admin_channel.send(f"Is pick time!")
             return
         await admin_channel.send(f"{team_one.name} vetoed {map_name}")
         if all_order + 1 == 1:
-            await admin_channel.send(f"{next_team.name} time to veto.\nUse the command `!veto <map_name>` for vetoing a map.")
+            text = f"{next_team.name} time to veto.\nClick a button for vetoing a map."
+            prefix = "❌"
+            next_step = "Veto"
         elif all_order + 1 < 6:
-            await admin_channel.send(f"{next_team.name} time to pick.\nUse the command `!pick <map_name>` for picking a map.")
+            text = f"{next_team.name} time to pick.\nClick a button for picking a map."
+            prefix = "✅"
+            next_step = "Pick"
     bot.veto_service.create_veto(veto)
-
+    admin_pick_veto_button_message = await admin_channel.fetch_message(game.admin_pick_veto_button_message_id)
     if all_order + 1 == 6: # Remaining map is the decider
         map_names.append(map_name)
         remaining_maps = [map_ for map_ in bot.MAP_POOL if map_ not in map_names]
@@ -1389,6 +1444,10 @@ async def _execute_veto(ctx, game: Game, game_to_wins:str, map_name:str):
         bot.pick_service.create_pick(pick)
         await admin_channel.send(f"Decider will be {remaining_maps[0]}.")
         await _create_game_maps(ctx, game=game)
+    else:
+        next_step_lower = next_step.lower()
+        view = ButtonPickAndBanView(ctx, remaining_maps=remaining_maps, type=next_step_lower, game=game)
+        await admin_pick_veto_button_message.edit("{next_step} a map:", view=view)
     public_channel = bot.get_channel(game.game_channel_id)
     embed = await _game_embed(ctx, game)
     if public_channel:
@@ -1503,6 +1562,7 @@ async def _execute_pick(ctx, game: Game, game_to_wins:str, map_name:str):
     Executes a pick on a game
     """
     guild = ctx.guild
+    next_step = ""
 
     admin_channel = bot.get_channel(game.admin_game_channel_id)
 
@@ -1542,6 +1602,8 @@ async def _execute_pick(ctx, game: Game, game_to_wins:str, map_name:str):
         return  
 
     pick = Pick(order_pick=all_order + 1, game_id=game.id, team_id=current_team.id, map_name=map_name, guild_id=guild.id)
+    map_names.append(map_name)
+    remaining_maps = [map_ for map_ in bot.MAP_POOL if map_ not in map_names]
     if game_to_wins == "bo1":
         await admin_channel.send(f"No picks on bo1 have to be assigned.")
         return
@@ -1551,27 +1613,36 @@ async def _execute_pick(ctx, game: Game, game_to_wins:str, map_name:str):
             return
         await admin_channel.send(f"{team_one.name} picked {map_name}")
         if all_order + 1 == 2 or all_order + 1 == 3: # time to pick
-            await admin_channel.send(f"{next_team.name} time to pick.\nUse the command `!pick <map_name>` for picking a map.")
+            text = f"{next_team.name} time to pick.\nClick a button for picking a map."
+            prefix = "✅"
+            next_step = "Pick"
         elif all_order + 1 < 6:
-            await admin_channel.send(f"{next_team.name} time to veto.\nUse the command `!veto <map_name>` for vetoing a map.")
+            text = f"{next_team.name} time to veto.\nClick a button for vetoing a map."
+            prefix = "❌"
+            next_step = "Veto"
     elif game_to_wins == "bo5":
         if all_order + 1 < 2:
             await admin_channel.send(f"Is veto time!")
             return
-        await admin_channel.send(f"{team_one.name} vetoed {map_name}")
         if all_order + 1 == 1:
-            await admin_channel.send(f"{next_team.name} time to veto.\nUse the command `!veto <map_name>` for vetoing a map.")
+            text = f"{next_team.name} time to veto.\nClick a button for vetoing a map."
+            prefix = "❌"
+            next_step = "Veto"
         elif all_order + 1 < 6:
-            await admin_channel.send(f"{next_team.name} time to pick.\nUse the command `!pick <map_name>` for picking a map.")
+            text = f"{next_team.name} time to pick.\nClick a button for picking a map."
+            prefix = "✅"
+            next_step = "Pick"
     bot.pick_service.create_pick(pick)
-
+    admin_pick_veto_button_message = await admin_channel.fetch_message(game.admin_pick_veto_button_message_id)
     if all_order + 1 == 6: # Remaining map is the decider
-        map_names.append(map_name)
-        remaining_maps = [map_ for map_ in bot.MAP_POOL if map_ not in map_names]
         pick = Pick(order_pick=all_order + 2, game_id=game.id, team_id=-1, map_name=remaining_maps[0], guild_id=guild.id)
         bot.pick_service.create_pick(pick)
         await admin_channel.send(f"Decider will be {remaining_maps[0]}.")
         await _create_game_maps(ctx, game=game)
+    else:
+        next_step_lower = next_step.lower()
+        view = ButtonPickAndBanView(ctx, remaining_maps=remaining_maps, type=next_step_lower, game=game)
+        await admin_pick_veto_button_message.edit(f"{next_step} a map:", view=view)
         
     public_channel = bot.get_channel(game.game_channel_id)
     embed = await _game_embed(ctx, game)
@@ -1728,7 +1799,6 @@ async def _set_result(ctx, game: Game, team_number: int, map_name: str):
     
     if game_winner is not None:
         await admin_channel.send(f"The winner of the game is {game_winner.name}.")
-        # TODO: Delete server from dathost
         game.team_winner = game_winner.id
         bot.game_service.update_game(game=game)
         await _game_summary(ctx, game)
@@ -1755,6 +1825,15 @@ async def _set_result(ctx, game: Game, team_number: int, map_name: str):
         if voice_channel_team_two:
             await voice_channel_team_two.delete()
         await _tournament_summary(ctx)
+
+# API paths
+@app.get('/match/{game_id}/{map_name}')
+async def get_users(game_id: int, map_name: str):
+    return {"user_data": {
+        "id": user_id,
+        "message": "Hello, " + user_name,
+    }}
+    # match_endpoint = f"{game.id}/{game_map.map_name}"
 
 def main():
     try:

@@ -16,6 +16,7 @@ class Game:
         voice_channel_team_one_id: Voice channel used for ingame for team one
         voice_channel_team_two_id: Voice channel used for ingame for team two
         public_game_message_id: Message id where the summary of the game is setted
+        admin_pick_veto_button_message_id: Message id where picks and bans are setted
     """    
     # Optional fields with defaults
     id: Optional[int] = None
@@ -29,3 +30,4 @@ class Game:
     voice_channel_team_one_id: Optional[int] = None
     voice_channel_team_two_id: Optional[int] = None
     public_game_message_id: Optional[int] = None
+    admin_pick_veto_button_message_id: Optional[int] = None

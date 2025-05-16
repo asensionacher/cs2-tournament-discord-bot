@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS game (
     voice_channel_team_one_id INTEGER NOT NULL,
     voice_channel_team_two_id INTEGER NOT NULL,
     public_game_message_id INTEGER NOT NULL,
+    admin_pick_veto_button_message_id INTEGER NOT NULL,
     FOREIGN KEY (team_one_id) REFERENCES team(id) ON DELETE CASCADE,
     FOREIGN KEY (team_two_id) REFERENCES team(id) ON DELETE CASCADE
 );
