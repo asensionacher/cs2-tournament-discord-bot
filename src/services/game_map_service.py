@@ -10,10 +10,10 @@ class GameMapService:
         """Insert a new game_map, returns game_map ID"""
         cursor = self.conn.execute(
             """
-            INSERT INTO game_map (guild_id, team_id_winner, game_number, map_name, game_id, status)
+            INSERT INTO game_map (guild_id, team_id_winner, game_number, map_name, game_id)
             VALUES (?, ?, ?, ?, ?)
             """,
-            (game_map.guild_id, game_map.team_id_winner, game_map.game_number, game_map.map_name, game_map.game_id, game_map.status)
+            (game_map.guild_id, game_map.team_id_winner, game_map.game_number, game_map.map_name, game_map.game_id)
         )
         self.conn.commit()
         return cursor.lastrowid
@@ -77,11 +77,11 @@ class GameMapService:
             """
             UPDATE game_map 
             SET guild_id = ?, team_id_winner = ?, game_number = ?, map_name = ?, 
-            game_id = ?, dathost_match_id = ?, status = ?
+            game_id = ?
             WHERE id = ?
             """,
             (game_map.guild_id, game_map.team_id_winner, game_map.game_number, game_map.map_name, 
-             game_map.game_id, game_map.dathost_match_id, game_map.status, 
+             game_map.game_id, 
              game_map.id)
         )
         self.conn.commit()

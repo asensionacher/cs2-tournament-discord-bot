@@ -17,5 +17,3 @@ class GameMap:
     guild_id: int = 0
     game_number: int = 0
     map_name: str = ""
-    dathost_match_id: Optional[str] = None
-    status: str = "not_started"

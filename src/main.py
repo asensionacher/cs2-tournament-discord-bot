@@ -12,6 +12,9 @@ import discord
 from discord.ext import commands
 import re
 
+import requests
+from rcon.source import rcon
+
 from services import DatabaseManager
 from models.team import Team
 from models.setting import Setting
@@ -53,10 +56,6 @@ bot = commands.Bot(
     intents=intents,
     help_command=None
 )
-
-default_map_pool = "inferno,anubis,nuke,ancient,mirage,train,dust2"
-
-map_pool = os.environ.get("MAP_POOL", default_map_pool).split(',')
 
 @bot.event
 async def on_ready():
@@ -204,12 +203,6 @@ async def start(ctx):
         for name, config in channels.items():            
             await _create_text_channel(ctx, channel_name=name, overwrites=config["overwrites"], category=config["category"])
         settings = {
-            "swiss_not_to_three_wins": {"value": "bo1"},
-            "swiss_to_three_wins": {"value": "bo3"},
-            "quarterfinal_rounds": {"value": "bo3"},
-            "semifinal_rounds": {"value": "bo3"},
-            "final_rounds": {"value": "bo5"},
-            "third_place_rounds": {"value": "bo3"},
             "start_executed": {"value": "true"},
             "all_teams_created": {"value": "false"},
         }
@@ -277,7 +270,6 @@ async def delete_player(ctx, nickname: str):
     if not ctx.channel.name == "admin":
         await ctx.send("Must be executed from admin channel")
         return
-        
     try:
         await _delete_player(ctx, nickname=nickname)
     except Exception as e:
@@ -395,7 +387,7 @@ async def veto(ctx, map_name: str):
             await ctx.send("This must be sent from a admin game channel.")
             return
         game_to_wins = await _get_game_to_wins(ctx, game=game)
-        await _execute_veto(ctx, game_to_wins=game_to_wins.value, game=game, map_name=map_name) 
+        await _execute_veto(ctx, game_to_wins=game_to_wins, game=game, map_name=map_name) 
     except Exception as e:
         logging.error(f"Error during veto command: {e}")
         await ctx.send(f"❌ Error during veto command: {e}")
@@ -415,7 +407,7 @@ async def pick(ctx, map_name: str):
             await ctx.send("This must be sent from a admin game channel.")
             return
         game_to_wins = await _get_game_to_wins(ctx, game=game)
-        await _execute_pick(ctx, game_to_wins=game_to_wins.value, game=game, map_name=map_name)
+        await _execute_pick(ctx, game_to_wins=game_to_wins, game=game, map_name=map_name)
     except Exception as e:
         logging.error(f"Error during pick command: {e}")
         await ctx.send(f"❌ Error during pick command: {e}")
@@ -495,7 +487,7 @@ async def autoveto(ctx):
         else:
             games = bot.game_service.get_all_games_not_finished(guild_id=guild.id)
             for game in games:
-                game_to_wins = (await _get_game_to_wins(ctx, game=game)).value
+                game_to_wins = await _get_game_to_wins(ctx, game=game)
                 if game_to_wins == "bo1":
                     await _execute_veto(ctx, game=game, map_name="anubis", game_to_wins=game_to_wins)
                     await _execute_veto(ctx, game=game, map_name="train", game_to_wins=game_to_wins)
@@ -536,7 +528,7 @@ async def autoresults(ctx):
         else:
             games = bot.game_service.get_all_games_not_finished(guild_id=guild.id)
         for game in games:
-            game_to_wins = (await _get_game_to_wins(ctx, game=game)).value
+            game_to_wins = (await _get_game_to_wins(ctx, game=game))
             if game_to_wins == "bo1":
                 await _set_result(ctx, game=game, team_number=1, map_name="dust2")
             elif game_to_wins == "bo3":
@@ -583,64 +575,6 @@ async def tournamentsummary(ctx):
     except Exception as e:
         logging.error(f"Error during tournamentsummary command: {e}")
         await ctx.send(f"❌ Error during tournamentsummary command: {e}")    
-
-@bot.command()
-@discord.ext.commands.has_role("admin")
-async def set_game_type(ctx, round_name:str, game_type:str):
-    """
-    Set the game type for a round.
-    Format: !set_game_type <round_name> <game_type>
-        - round_name: Single word (e.g., "quarterfinals")
-        - game_type: Single word (e.g., "bo1", "bo3", "bo5")
-    """
-    try:
-        if not ctx.channel.name == "admin":
-            await ctx.send("Must be executed from admin channel")
-            return
-        else:
-            if round_name not in ["swiss_not_to_three_wins", "swiss_to_three_wins", "quarterfinal_rounds", "semifinal_rounds", "final_rounds", "third_place_rounds"]:
-                await ctx.send("❌ Invalid round name! Must be one of: swiss_not_to_three_wins, swiss_to_three_wins, quarterfinal_rounds, semifinal_rounds, final_rounds, third_place_rounds")
-                return
-            if game_type not in ["bo1", "bo3", "bo5"]:
-                await ctx.send("❌ Invalid game type! Must be one of: bo1, bo3, bo5")
-                return
-            setting = await _create_server_setting(ctx, key=round_name, value=game_type)
-            if setting is None:
-                await ctx.send("❌ Error creating setting")
-                return
-            await ctx.send(f"Game type for {round_name} set to {game_type}")
-    except Exception as e:
-        logging.error(f"Error during set_game_type command: {e}")
-        await ctx.send(f"❌ Error during set_game_type command: {e}")
-
-@bot.command()
-@discord.ext.commands.has_role("admin")
-async def set_game_server_setting(ctx, key:str, value:str):
-    """
-    Set a game server setting, for example, if dathost is used or not.
-    Format: !set_game_server_settings <key> <value>
-        - key: Single word (e.g., "dathost")
-        - value: Single word (e.g., "true")
-    """
-    try:
-        if not ctx.channel.name == "admin":
-            await ctx.send("Must be executed from admin channel")
-            return
-        else:
-            if key not in [ "dathost"]:
-                await ctx.send("❌ Invalid key! Must be one of: dathost")
-                return
-            if value not in ["true", "false"]:
-                await ctx.send("❌ Invalid value! Must be one of: true, false")
-                return
-            setting = await _create_server_setting(ctx, key=key, value=value)
-            if setting is None:
-                await ctx.send("❌ Error creating setting")
-                return
-            await ctx.send(f"Game server setting {key} set to {value}")
-    except Exception as e:
-        logging.error(f"Error during set_game_server_settings command: {e}")
-        await ctx.send(f"❌ Error during set_game_server_settings command: {e}")
 
 @bot.command()
 @discord.ext.commands.has_role("admin")
@@ -739,27 +673,20 @@ async def start_map(ctx):
     Start the current map for the current game. 
     Format: !start_map
     """
+    guild = ctx.guild
     channel_id = ctx.channel.id
     game = bot.game_service.get_game_by_admin_game_channel_id(admin_game_channel_id=channel_id)
     if game is None:
         await ctx.send("This must be sent from a admin game channel.")
         return
     
-    game_map = bot.game_map_service.get_first_not_finished_game_map(game_id=game.id)
+    game_map = bot.game_map_service.get_first_not_finished_game_map(guild_id=guild.id, game_id=game.id)
     if game_map is None:
         await ctx.send("No maps found for this game or all maps have been finished.")
         return
-    if game_map.status == "not_started":
-        dathost_setting = bot.setting_service.get_setting_by_key(key="dathost", guild_id=ctx.guild.id)
-        
-        if dathost_setting is not None:
-            # TODO: Create dathost server with random password (https://dathost.net/reference/post_game_servers)
-            # TODO: Check if webhook is setted, maybe create another container for it
-            # TODO: Create current map (https://dathost.net/reference/post_api-0-1-cs2-matches)
-            # TODO: Set game map status to "started"
-            print("TEST")
+    
+    await _create_dathost_match(ctx, game=game, game_map=game_map)
             
-
 def setup_logging():
     """Configure logging with file rotation"""
     os.makedirs('logs', exist_ok=True)
@@ -805,6 +732,30 @@ def setup_database():
     bot.game_map_service = GameMapService(bot.db.get_connection())
     bot.summary_service = SummaryService(bot.db.get_connection())
     logging.info("Database and services initialized")
+
+def setup_vars():
+    default_map_pool = "inferno,anubis,nuke,ancient,mirage,train,dust2"
+
+    bot.MAP_POOL = os.environ.get("MAP_POOL", default_map_pool).split(',')
+    bot.MAP_POOL_DATHOST = [f"de_{map_name}" for map_name in bot.MAP_POOL]
+    bot.SWISS_DECIDER=os.environ.get("SWISS_DECIDER", "bo3")
+    bot.SWISS_NOT_DECIDER=os.environ.get("SWISS_NOT_DECIDER", "bo1")
+    bot.QUATERFINAL_ROUND=os.environ.get("QUATERFINAL_ROUND", "bo3")
+    bot.SEMIFINAL_ROUND=os.environ.get("SEMIFINAL_ROUND", "bo3")
+    bot.FINAL_ROUND=os.environ.get("FINAL_ROUND", "bo5")
+    bot.THIRD_PLACE_ROUND=os.environ.get("THIRD_PLACE_ROUND", "bo3")
+    bot.TOURNAMENT_NAME=os.environ.get("TOURNAMENT_NAME", None)
+    bot.WEBHOOK_BASE_URL=os.environ.get("WEBHOOK_BASE_URL", None)
+    bot.DATHOST_USERNAME=os.environ.get("DATHOST_USERNAME", None)
+    bot.DATHOST_PASSWORD=os.environ.get("DATHOST_PASSWORD", None)
+    bot.DATHOST_WEBHOOK_AUTHORIZATION_HEADER=os.environ.get("DATHOST_WEBHOOK_AUTHORIZATION_HEADER", "1A2B3C4D5E6F7G8H9I0J")
+    bot.DATHOST_GAME_SERVER_ID=os.environ.get("DATHOST_GAME_SERVER_ID", None)
+    bot.DATHOST_SERVER_HOST=os.environ.get("DATHOST_SERVER_HOST", None)
+    bot.DATHOST_SERVER_PORT=os.environ.get("DATHOST_SERVER_PORT", None)
+    bot.DATHOST_SERVER_PASSWORD=os.environ.get("DATHOST_SERVER_PASSWORD", None)
+    bot.DATHOST_RCON_PASSWORD=os.environ.get("DATHOST_RCON_PASSWORD", None)
+
+
 
 def _is_valid_team_name(name: str) -> bool:
     """Allows alphanumeric + spaces, no symbols"""
@@ -1317,21 +1268,21 @@ async def _tournament_summary(ctx):
                         team_two_wins = team_two_wins + 1
                 games_to_wins = await _get_game_to_wins(ctx, game)
                 game_winner = None
-                if games_to_wins.value == "bo1":
+                if games_to_wins == "bo1":
                     if team_one_wins >= 1:
                         team_one_name = f"✅{team_one_name}"
                         team_two_name = f"{team_two_name}❌"
                     elif team_two_wins >= 1:
                         team_one_name = f"❌{team_one_name}"
                         team_two_name = f"{team_two_name}✅"
-                elif games_to_wins.value == "bo3":
+                elif games_to_wins == "bo3":
                     if team_one_wins >= 2:
                         team_one_name = f"✅{team_one_name}"
                         team_two_name = f"{team_two_name}❌"
                     elif team_two_wins >= 2:
                         team_one_name = f"❌{team_one_name}"
                         team_two_name = f"{team_two_name}✅"
-                elif games_to_wins.value == "bo5":
+                elif games_to_wins == "bo5":
                     if team_one_wins >= 3:
                         team_one_name = f"✅{team_one_name}"
                         team_two_name = f"{team_two_name}❌"
@@ -1355,16 +1306,13 @@ async def _get_game_to_wins(ctx, game: Game) -> str:
     """
     Have to return if the game is bo1, bo3 or bo5
     """
-    guild = ctx.guild
     game_type = game.game_type
-    key = ""
     if game_type == "swiss_1" or game_type == "swiss_2_high" or game_type == "swiss_2_low" or game_type == "swiss_3_low" or game_type == "swiss_3_mid":
-        key = "swiss_not_to_three_wins"
+        return bot.SWISS_NOT_DECIDER
     elif game_type == "swiss_3_high" or game_type == "swiss_4_high" or game_type == "swiss_4_low" or game_type == "swiss_5":
-        key = "swiss_to_three_wins"
+        return bot.SWISS_DECIDER
     else:
-        key = f"{game_type}_rounds"
-    return bot.setting_service.get_setting_by_name(guild_id=guild.id, setting_key=key)
+        return bot.__getattribute__(f"{game_type}_ROUND", "bo3")
 
 async def _execute_veto(ctx, game: Game, game_to_wins:str, map_name:str):
     """
@@ -1386,7 +1334,7 @@ async def _execute_veto(ctx, game: Game, game_to_wins:str, map_name:str):
     # Get remaining maps
     map_names = [veto.map_name for veto in vetoes]
     map_names += [pick.map_name for pick in picks]
-    remaining_maps = [map_ for map_ in map_pool if map_ not in map_names]
+    remaining_maps = [map_ for map_ in bot.MAP_POOL if map_ not in map_names]
 
     if map_name not in remaining_maps:
         await admin_channel.send(f"This map was already vetoed or picked or is not in the map pool. Please select one of {remaining_maps}.")
@@ -1436,22 +1384,11 @@ async def _execute_veto(ctx, game: Game, game_to_wins:str, map_name:str):
 
     if all_order + 1 == 6: # Remaining map is the decider
         map_names.append(map_name)
-        remaining_maps = [map_ for map_ in map_pool if map_ not in map_names]
+        remaining_maps = [map_ for map_ in bot.MAP_POOL if map_ not in map_names]
         pick = Pick(order_pick=all_order + 2, game_id=game.id, team_id=-1, map_name=remaining_maps[0], guild_id=guild.id)
         bot.pick_service.create_pick(pick)
         await admin_channel.send(f"Decider will be {remaining_maps[0]}.")
-        text_for_admin = f"""
-            Admin, if you decided to use dathost and you want the bot to automatically manage the game, please from the admin channel
-            use the commands:\n
-            - `!set_game_ip {game.id} <ip>` for setting the ip of the game. The \"{game.id}\" value is the id of the current game. This value will be sent to the game admin channel.\n
-            - `!set_game_port {game.id} <port>` for setting the port of the game. The \"{game.id}\" value is the id of the current game. This value will be sent to the game admin channel.\n
-            - `!set_game_password {game.id} <password>` for setting the password of the game. The \"{game.id}\" value is the id of the current game. This value will be sent to the game admin channel.\n
-            - `!set_hltv_ip {game.id} <ip>` for setting the ip of the hltv. The \"{game.id}\" value is the id of the current game. Set this only if HLTV is on.\n
-            - `!set_hltv_port {game.id} <port>` for setting the port of the hltv. The \"{game.id}\" value is the id of the current game. Set this only if HLTV is on.\n
-            - `!set_hltv_password {game.id} <password>` for setting the password of the hltv. The \"{game.id}\" value is the id of the current game. Set this only if HLTV is on.\n
-            - `!set_rcon_password {game.id} <password>` for setting the rcon password of the game. The \"{game.id}\" value is the id of the current game. Set this only if you want the bot to manage the game.\n
-        """
-        await admin_channel.send(text_for_admin)
+        await _create_game_maps(ctx, game=game)
     public_channel = bot.get_channel(game.game_channel_id)
     embed = await _game_embed(ctx, game)
     if public_channel:
@@ -1461,65 +1398,105 @@ async def _execute_veto(ctx, game: Game, game_to_wins:str, map_name:str):
         except Exception as e:
             await admin_channel.send(f"⚠️ Veto added but failed to update display: {e}")
 
-async def _create_dathost_params(ctx, game: Game) -> str:
+async def _create_dathost_match(ctx, game: Game, game_map:GameMap):
     """
-    Creates the dathost params for the game
+    Creates the dathost match
     """
 
     # Get all values of dathost
     team_one = bot.team_service.get_team_by_id(team_id=game.team_one_id)
     team_two = bot.team_service.get_team_by_id(team_id=game.team_two_id)
-    match_id = game.id
+    match_endpoint = f"{game.id}/{game_map.map_name}"
     players_team_1 = bot.player_service.get_players_by_team_id(team_id=team_one.id)
     players_team_2 = bot.player_service.get_players_by_team_id(team_id=team_two.id)
-    game_maps = bot.game_map_service.get_all_game_maps_by_game(guild_id=ctx.guild.id, game_id=game.id)
-    hostname = f"{game.game_type}: {team_one.name} vs {team_two.name} #{match_id}"
+    hostname = f"{game.game_type}: {team_one.name} vs {team_two.name} #{game.id}"
     
-    # TODO: Follow dathost format https://dathost.net/reference/post_api-0-1-cs2-matches
-
-    # file = {}
-    # file['matchid'] = match_id
-
-    # file['team1'] = {}
-    # file['team1']['name'] = team_one.name
-    # file['team1']['players'] = {}
-    # for player in players_team_1:
-    #     file['team1']['players'][player.steamid] = player.nickname
-
-    # file['team2'] = {}
-    # file['team2']['name'] = team_two.name
-    # file['team2']['players'] = {}
-    # for player in players_team_2:
-    #     file['team2']['players'][player.steamid] = player.nickname
-    # file['num_maps'] = len(game_maps)
-    # file['maplist'] = []
-    # for game_map in game_maps:
-    #     file['maplist'].append(game_map.map_name)
-    # file['map_sides'] = []
-    # file['map_sides'].append('team1_ct')
-    # file['map_sides'].append('team2_ct')
-    # file['map_sides'].append('knife')
-    # file['clinch_series'] = True
-    # file['players_per_team'] = 5
-    # file['cvars'] = {}
-    # file['cvars']['hostname'] = hostname
-    # file['cvars']['mp_friendlyfire'] = 1
-
-    # # Get file
-    # json_data = json.dumps(file)
-    # # beautify json data
-    # json_data = json.dumps(json.loads(json_data), indent=4)
-    # # send json data as a file to game admin channel
-    # file_name = f"matchzy_{game.id}.json"
-    # # write file into a temp directory
-    # temp_dir = os.path.join(os.getcwd(), "temp")
-    # if not os.path.exists(temp_dir):
-    #     os.makedirs(temp_dir)
-    # file_path = os.path.join(temp_dir, file_name)
-    # with open(file_path, "w") as f:
-    #     f.write(json_data)
-    # # return file path
-    # return file_path
+    # Create a dathost map
+    username = bot.DATHOST_USERNAME
+    if username is None:
+        await ctx.send("❌ Dathost username not set in environment variables.")
+        return None
+    password = bot.DATHOST_PASSWORD
+    if password is None:
+        await ctx.send("❌ Dathost password not set in environment variables.")
+        return None
+    server_id = bot.DATHOST_GAME_SERVER_ID
+    if server_id is None:
+        await ctx.send("❌ Dathost server id not set in environment variables.")
+        return None
+    server_host = bot.DATHOST_SERVER_HOST
+    if server_host is None:
+        await ctx.send("❌ Dathost server host not set in environment variables.")
+        return None
+    server_port= bot.DATHOST_SERVER_PORT
+    if server_port is None:
+        await ctx.send("❌ Dathost server port not set in environment variables.")
+        return None
+    webhook_url = bot.WEBHOOK_BASE_URL
+    rcon_password = bot.DATHOST_RCON_PASSWORD
+    if rcon_password is not None:
+        try:
+            response = await rcon(
+                'hostname', hostname,
+                host=server_host, port=server_port, passwd=rcon_password
+            )
+            print(f"RCON response: {response}")
+        except Exception as e:
+            await ctx.send(f"❌ Error setting hostname: {e}")
+        
+    body = {}
+    body['game_server_id'] = server_id
+    body['team1'] = {}
+    body['team1']['name'] = team_one.name
+    body['team1']['flag'] = ""
+    body['team2'] = {}
+    body['team2']['name'] = team_two.name
+    body['team2']['flag'] = ""
+    body['players'] = []
+    for p in players_team_1:
+        player = {}
+        player['steam_id_64'] = str(p.steamid)
+        player['nickname_override'] = p.nickname
+        player['team'] = "team1"
+        body['players'].append(player)
+    for p in players_team_2:
+        player = {}
+        player['steam_id_64'] = str(p.steamid)
+        player['nickname_override'] = p.nickname
+        player['team'] = "team2"
+        body['players'].append(player)
+    body['settings'] = {}
+    body['settings']['map'] = game_map.map_name
+    body['settings']['team_size'] = 7
+    body['settings']['wait_for_gotv'] = True
+    body['settings']['enable_plugin'] = True
+    body['settings']['enable_tech_pause'] = True
+    if webhook_url is not None:
+        body['webhooks'] = {}
+        body['webhooks']['event_url'] = f"{webhook_url}/match/{match_endpoint}"
+        body['webhooks']['enabled_events'] = []
+        body['webhooks']['enabled_events'].append("*")
+        body['webhooks']['authorization_header'] = bot.DATHOST_WEBHOOK_AUTHORIZATION_HEADER
+    headers = {
+        "accept": "application/json",
+        "content-type": "application/json"
+    }
+    await ctx.send(body)
+    try:
+        response = requests.post(
+            "https://dathost.net/api/0.1/cs2-matches",
+            headers=headers,
+            json=body,
+            auth=(username, password)
+        )
+    except requests.exceptions.RequestException as e:
+        await ctx.send(f"❌ Error creating match: {e}")
+        return None   
+    print(f"Dathost response: {response.status_code} - {response.text}")
+    if response.status_code == 200:
+        await ctx.send(f"Match started in dathost. Connect to ||{server_host}:{server_port} with password {password}||")
+    else:
+        await ctx.send(f"❌ Error creating match: {response.text}")
 
 async def _execute_pick(ctx, game: Game, game_to_wins:str, map_name:str):
     """
@@ -1541,7 +1518,7 @@ async def _execute_pick(ctx, game: Game, game_to_wins:str, map_name:str):
     # Get remaining maps
     map_names = [veto.map_name for veto in vetoes]
     map_names += [pick.map_name for pick in picks]
-    remaining_maps = [map_ for map_ in map_pool if map_ not in map_names]
+    remaining_maps = [map_ for map_ in bot.MAP_POOL if map_ not in map_names]
 
     if map_name not in remaining_maps:
         await admin_channel.send(f"This map was already vetoed or picked or is not in the map pool. Please select one of {remaining_maps}.")
@@ -1590,7 +1567,7 @@ async def _execute_pick(ctx, game: Game, game_to_wins:str, map_name:str):
 
     if all_order + 1 == 6: # Remaining map is the decider
         map_names.append(map_name)
-        remaining_maps = [map_ for map_ in map_pool if map_ not in map_names]
+        remaining_maps = [map_ for map_ in bot.MAP_POOL if map_ not in map_names]
         pick = Pick(order_pick=all_order + 2, game_id=game.id, team_id=-1, map_name=remaining_maps[0], guild_id=guild.id)
         bot.pick_service.create_pick(pick)
         await admin_channel.send(f"Decider will be {remaining_maps[0]}.")
@@ -1620,7 +1597,7 @@ async def _game_embed(ctx, game: Game) -> discord.Embed:
     game_maps = bot.game_map_service.get_all_game_maps_by_game(guild_id=guild.id, game_id=game.id)
 
     embed = discord.Embed(title=f"{team_one.name} vs {team_two.name} picks, bans and maps", color=discord.Color.blue())
-    embed.description = f"Game between {team_one.name} vs {team_two.name} of type {game_to_wins.value}.\n"
+    embed.description = f"Game between {team_one.name} vs {team_two.name} of type {game_to_wins}.\n"
     
     # Get picks and bans order
     # Normalize both to a unified list with a common 'order'
@@ -1672,6 +1649,7 @@ async def _create_game_maps(ctx, game: Game) -> list[GameMap]:
     game_maps = []
     for pick in picks:
         game_map = GameMap(game_number=i, map_name=pick.map_name, game_id=game.id, team_id_winner=-1, guild_id=guild.id)
+        await ctx.send(f"Creating game map {game_map.map_name} for game {game.id}")
         game_map.id = bot.game_map_service.create_game_map(game_map)
         game_maps.append(game_map)
         i = i + 1
@@ -1732,17 +1710,17 @@ async def _set_result(ctx, game: Game, team_number: int, map_name: str):
 
     games_to_wins = await _get_game_to_wins(ctx, game)
     game_winner = None
-    if games_to_wins.value == "bo1":
+    if games_to_wins == "bo1":
         if team_one_wins >= 1:
             game_winner = team_one
         elif team_two_wins >= 1:
             game_winner = team_two
-    elif games_to_wins.value == "bo3":
+    elif games_to_wins == "bo3":
         if team_one_wins >= 2:
             game_winner = team_one
         elif team_two_wins >= 2:
             game_winner = team_two
-    elif games_to_wins.value == "bo5":
+    elif games_to_wins == "bo5":
         if team_one_wins >= 3:
             game_winner = team_one
         elif team_two_wins >= 3:
@@ -1785,6 +1763,7 @@ def main():
         load_dotenv()
         logging.info(f"TOKEN: {os.environ['DISCORD_BOT_TOKEN']}")
         setup_database()
+        setup_vars()
         
         bot.run(os.environ["DISCORD_BOT_TOKEN"])
     except KeyError:
