@@ -78,7 +78,7 @@ class ButtonPickAndBanView(View):
         super().__init__()
         self.ctx = ctx
         self.game = game
-
+        prefix = ""
         # Add buttons to the view
         if type == "veto":
             prefix = "❌"
@@ -1447,7 +1447,7 @@ async def _execute_veto(ctx, game: Game, game_to_wins:str, map_name:str):
     else:
         next_step_lower = next_step.lower()
         view = ButtonPickAndBanView(ctx, remaining_maps=remaining_maps, type=next_step_lower, game=game)
-        await admin_pick_veto_button_message.edit("{next_step} a map:", view=view)
+        await admin_pick_veto_button_message.edit(content=f"{next_step} a map:", view=view)
     public_channel = bot.get_channel(game.game_channel_id)
     embed = await _game_embed(ctx, game)
     if public_channel:
@@ -1642,7 +1642,7 @@ async def _execute_pick(ctx, game: Game, game_to_wins:str, map_name:str):
     else:
         next_step_lower = next_step.lower()
         view = ButtonPickAndBanView(ctx, remaining_maps=remaining_maps, type=next_step_lower, game=game)
-        await admin_pick_veto_button_message.edit(f"{next_step} a map:", view=view)
+        await admin_pick_veto_button_message.edit(content=f"{next_step} a map:", view=view)
         
     public_channel = bot.get_channel(game.game_channel_id)
     embed = await _game_embed(ctx, game)
