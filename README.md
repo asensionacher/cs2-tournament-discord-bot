@@ -23,8 +23,6 @@ This bot is in a very early stage, so keep in mind that bugs and missing feature
 - [ ] Adding more teams, now only 16 teams can be added.
 - [ ] Add RCON commands for automatically starting matches using [MatchZy match_setup](https://shobhit-pathak.github.io/MatchZy/match_setup/).
 - [ ] Receive [MatchZy Events & Forwards](https://shobhit-pathak.github.io/MatchZy/events_and_forwards/) for automatically set map and games winners.
-- [x] Auto host games in [dathost](https://dathost.net/) using their API (needs testing).
-- [ ] Receive [dathost webhooks](https://dathost.readme.io/docs/cs2-match-api-webhooks) for automatically set map and games winners.
 - [ ] Share stats of each map.
 
 ## How to use
@@ -65,7 +63,7 @@ For using the bot, you have to do:
    7. `!add_player Iberian_Soul DeLonge 76561198028497770 coach`
 3. Once you have the 16 teams created, add to each user in discord their role, which are in the example above `Iberian_Soul_captain`, `Iberian_Soul_player`. `Iberian_Soul_coach`
 4. Execute from `Admin` channel `!all_teams_created`. The channels on `Swiss stage round 1` will be randomly created the games. For each game, an admin channel and a public channel are created. On the game-admin channel only the captains can write and is used for picks & bans, but you can also use it for internal game communication between teams and org. The idea is to have also public-game-channel to show information about the match.
-5. On each game, the captain of each team have to send vetoes and picks. Send `!veto dust2` for vetoing dust2 or `!pick inferno` for picking inferno. Once all vetoes and picks are selected, decider will be automatically selected.
-6. Once all games are finished, automatically new games will be created, respecting the current streak of each team.
+5. On each game, the captain of each team have to send vetoes and picks. They have to click on buttons when it's their turn.
+6. Once all games are finished, run `!finish_round` in the admin channel to create the new games.
 7. Once the swiss-stage is finished, quarterfinal will be created. The same for the rest of elimination stage.
 

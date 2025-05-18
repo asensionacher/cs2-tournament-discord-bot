@@ -62,38 +62,64 @@ bot = commands.Bot(
 # Buttons handler
 
 # This is the function that will be called when a button is pressed
-async def executebutton(ctx, button_content, game: Game):
-    is_pick = "✅" in button_content
+async def executebuttonpickandban(ctx, button_content, game: Game):
     map_name = button_content.replace("❌", "").replace("✅", "")
-    game_to_wins = await _get_game_to_wins(ctx, game=game)
-    if is_pick:
-        await _execute_pick(ctx, game_to_wins=game_to_wins, game=game, map_name=map_name)
-    else:
-        await ctx.send("vetoing")
-        await _execute_veto(ctx, game_to_wins=game_to_wins, game=game, map_name=map_name) 
+    await _pick_veto(ctx, game=game, map_name=map_name)
 
 # Custom view for the buttons
 class ButtonPickAndBanView(View):
-    def __init__(self, ctx, remaining_maps: list, type: str, game: Game):
+    def __init__(self, ctx, type: str, game: Game):
         super().__init__()
         self.ctx = ctx
         self.game = game
-        prefix = ""
-        # Add buttons to the view
-        if type == "veto":
-            prefix = "❌"
-        elif type == "pick":
-            prefix = "✅"
-        for map_name in remaining_maps:
-            self.add_item(ButtonPickAndBanHandler(label=f"{prefix}{map_name}", ctx=ctx, game=game))
+        emoji = "✅"
+        picks = bot.pick_service.get_all_picks_by_game(guild_id=self.ctx.guild.id, game_id=game.id)
+        vetoes = bot.veto_service.get_all_vetoes_by_game(guild_id=self.ctx.guild.id, game_id=game.id)
+        for map_name in bot.MAP_POOL:
+            # Get if exists a veto for the map_name in vetoes
+            veto = next((v for v in vetoes if v.map_name == map_name), None)
+            # Get if exists a pick for the map_name in picks
+            pick = next((p for p in picks if p.map_name == map_name), None)
+            vetoed = veto is not None
+            picked = pick is not None
+
+            label = map_name
+
+            disabled = False
+            if vetoed:
+                # Get team name that vetoed the map
+                team = bot.team_service.get_team_by_id(team_id=veto.team_id)
+                label = f"{map_name} vetoed by {team.name}"
+                emoji = "❌"
+                disabled = True
+            elif picked:
+                # Get team name that picked the map
+                team = bot.team_service.get_team_by_id(team_id=pick.team_id)
+                if team is None:
+                    label = f"{map_name} will be the decider."
+                else:
+                    label = f"{map_name} picked by {team.name}"
+                emoji = "✅"
+                disabled = True
+            else:
+                # Add buttons to the view
+                if type == "veto":
+                    emoji = "❌"
+                elif type == "pick":
+                    emoji = "✅"
+                label = map_name
+                disabled = False
+            self.add_item(ButtonPickAndBanHandler(label=label, ctx=ctx, game=game, disabled=disabled, emoji=emoji))
 
 # Custom button handler
 class ButtonPickAndBanHandler(Button):
-    def __init__(self, label, ctx, game: Game):
+    def __init__(self, label, ctx, game: Game, disabled: bool, emoji: str):
         super().__init__(label=label, style=discord.ButtonStyle.primary)
         self.ctx = ctx
         self.label = label
         self.game = game
+        self.disabled = disabled
+        self.emoji = emoji
 
     async def callback(self, interaction: discord.Interaction):
         # Optionally, defer the interaction
@@ -101,8 +127,48 @@ class ButtonPickAndBanHandler(Button):
         await interaction.response.defer()
         # Simulate "ctx" with the original one from command
         await self.ctx.send(f"Button {self.label} pressed!")
-        await executebutton(self.ctx, self.label, game=self.game)
+        await executebuttonpickandban(self.ctx, self.label, game=self.game)
 
+# This is the function that will be called when a button is pressed
+async def executebuttonresult(ctx, team_number: int, map_name: str, game: Game):
+    try:
+        await _set_result(ctx, game=game, team_number=team_number, map_name=map_name)
+    except Exception as e:
+        logging.error(f"Error during result command: {e}")
+        await ctx.send(f"❌ Error during result command: {e}")
+
+# Custom view for the buttons
+class ButtonResultView(View):
+    def __init__(self, ctx, team_one: Team, team_two: Team, map_name: str, game: Game):
+        super().__init__()
+        self.ctx = ctx
+        self.game = game
+        self.map_name = map_name
+
+        emoji = "🏆"            
+        label = f"Set {team_one.name} as winner."
+        self.add_item(ButtonResultHandler(ctx=ctx, label=label, team_number=1, game=game, map_name=map_name, emoji=emoji))
+        label = f"Set {team_two.name} as winner."        
+        self.add_item(ButtonResultHandler(ctx=ctx, label=label, team_number=2, game=game, map_name=map_name, emoji=emoji))
+
+# Custom button handler
+class ButtonResultHandler(Button):
+    def __init__(self, ctx, label, team_number: int, game: Game, map_name: str, emoji: str):
+        super().__init__(label=label, style=discord.ButtonStyle.primary)
+        self.ctx = ctx
+        self.label = label
+        self.game = game
+        self.map_name = map_name
+        self.team_number = team_number
+        self.emoji = emoji
+
+    async def callback(self, interaction: discord.Interaction):
+        # Optionally, defer the interaction
+        print(f"Button {self.label}")
+        await interaction.response.defer()
+        # Simulate "ctx" with the original one from command
+        await self.ctx.send(f"Button {self.label} pressed!")
+        await executebuttonresult(self.ctx, team_number=self.team_number, game=self.game, map_name=self.map_name)
 
 @bot.event
 async def on_ready():
@@ -410,46 +476,6 @@ async def mock_teams(ctx):
         await ctx.send(f"❌ Error during mock_teams command: {e}")
 
 @bot.command()
-async def veto(ctx, map_name: str):
-    """
-    Veto a map from the game admin channel. This only could be executed by the captain
-    of the team that can veto at the moment
-    Format: !veto <map_name>
-        - names: Single word (e.g., "dust2")
-    """
-    try:
-        channel_id = ctx.channel.id
-        game = bot.game_service.get_game_by_admin_game_channel_id(admin_game_channel_id=channel_id)
-        if game is None:
-            await ctx.send("This must be sent from a admin game channel.")
-            return
-        game_to_wins = await _get_game_to_wins(ctx, game=game)
-        await _execute_veto(ctx, game_to_wins=game_to_wins, game=game, map_name=map_name) 
-    except Exception as e:
-        logging.error(f"Error during veto command: {e}")
-        await ctx.send(f"❌ Error during veto command: {e}")
-
-@bot.command()
-async def pick(ctx, map_name: str):
-    """
-    Pick a map from the game admin channel. This only could be executed by the captain
-    of the team that can pick at the moment
-    Format: !pick <map_name>
-        - names: Single word (e.g., "dust2")
-    """
-    try:
-        channel_id = ctx.channel.id
-        game = bot.game_service.get_game_by_admin_game_channel_id(admin_game_channel_id=channel_id)
-        if game is None:
-            await ctx.send("This must be sent from a admin game channel.")
-            return
-        game_to_wins = await _get_game_to_wins(ctx, game=game)
-        await _execute_pick(ctx, game_to_wins=game_to_wins, game=game, map_name=map_name)
-    except Exception as e:
-        logging.error(f"Error during pick command: {e}")
-        await ctx.send(f"❌ Error during pick command: {e}")
-
-@bot.command()
 @discord.ext.commands.has_role("admin")
 async def summary(ctx):
     """
@@ -467,33 +493,6 @@ async def summary(ctx):
     except Exception as e:
         logging.error(f"Error during summary command: {e}")
         await ctx.send(f"❌ Error during summary command: {e}")
-    
-@bot.command()
-@discord.ext.commands.has_role("admin")
-async def result(ctx, map_name: str, team_number: int):
-    """
-    Set the result of a map for a game from an admin game channel. This only can be executed by an admin.
-    Once the game is finished, the results cannot be changed.
-    Team one refers on the first team to appear in the channel name.
-    Team two refers on the second team to appear in the cannel name.
-    Format: !result <map_name> <team_number>
-        - names: Single word (e.g., "dust2")
-        - team_number: Int (1 or 2)
-    If team_number is 1, the Team One wins.
-    If team_number is 2, the Team Two wins.
-    """
-    try:
-        channel_id = ctx.channel.id
-        game = bot.game_service.get_game_by_admin_game_channel_id(admin_game_channel_id=channel_id)
-        if game is None:
-            await ctx.send("This must be sent from a admin game channel.")
-            return
-        await _set_result(ctx, game=game, team_number=team_number, map_name=map_name)
-        await _game_summary(ctx, game=game)
-        await _tournament_summary(ctx)
-    except Exception as e:
-        logging.error(f"Error during result command: {e}")
-        await ctx.send(f"❌ Error during result command: {e}")
     
 @bot.command()
 @discord.ext.commands.has_role("admin")
@@ -524,28 +523,13 @@ async def autoveto(ctx):
         else:
             games = bot.game_service.get_all_games_not_finished(guild_id=guild.id)
             for game in games:
-                game_to_wins = await _get_game_to_wins(ctx, game=game)
-                if game_to_wins == "bo1":
-                    await _execute_veto(ctx, game=game, map_name="anubis", game_to_wins=game_to_wins)
-                    await _execute_veto(ctx, game=game, map_name="train", game_to_wins=game_to_wins)
-                    await _execute_veto(ctx, game=game, map_name="inferno", game_to_wins=game_to_wins)
-                    await _execute_veto(ctx, game=game, map_name="mirage", game_to_wins=game_to_wins)
-                    await _execute_veto(ctx, game=game, map_name="nuke", game_to_wins=game_to_wins)
-                    await _execute_veto(ctx, game=game, map_name="ancient", game_to_wins=game_to_wins)
-                elif game_to_wins == "bo3":
-                    await _execute_veto(ctx, game=game, map_name="anubis", game_to_wins=game_to_wins)
-                    await _execute_veto(ctx, game=game, map_name="train", game_to_wins=game_to_wins)
-                    await _execute_pick(ctx, game=game, map_name="inferno", game_to_wins=game_to_wins)
-                    await _execute_pick(ctx, game=game, map_name="mirage", game_to_wins=game_to_wins)
-                    await _execute_veto(ctx, game=game, map_name="nuke", game_to_wins=game_to_wins)
-                    await _execute_veto(ctx, game=game, map_name="ancient", game_to_wins=game_to_wins)
-                elif game_to_wins == "bo5":
-                    await _execute_veto(ctx, game=game, map_name="anubis", game_to_wins=game_to_wins)
-                    await _execute_veto(ctx, game=game, map_name="train", game_to_wins=game_to_wins)
-                    await _execute_pick(ctx, game=game, map_name="inferno", game_to_wins=game_to_wins)
-                    await _execute_pick(ctx, game=game, map_name="mirage", game_to_wins=game_to_wins)
-                    await _execute_pick(ctx, game=game, map_name="nuke", game_to_wins=game_to_wins)
-                    await _execute_pick(ctx, game=game, map_name="ancient", game_to_wins=game_to_wins)
+                await _pick_veto(ctx, game=game, map_name="anubis")
+                await _pick_veto(ctx, game=game, map_name="train")
+                await _pick_veto(ctx, game=game, map_name="inferno")
+                await _pick_veto(ctx, game=game, map_name="mirage")
+                await _pick_veto(ctx, game=game, map_name="nuke")
+                await _pick_veto(ctx, game=game, map_name="ancient")
+            
     except Exception as e:
         logging.error(f"Error during autoveto command: {e}")
         await ctx.send(f"❌ Error during autoveto command: {e}")    
@@ -651,8 +635,8 @@ async def delete_games(ctx, game_type:str):
             await ctx.send("Must be executed from admin channel")
             return
         else:
-            if game_type not in ["swiss_1", "swiss_2_high", "swiss_2_low", "swiss_3_high", "swiss_3_low", "quarterfinal_rounds", "semifinal_rounds", "final_rounds", "third_place_rounds"]:
-                await ctx.send("❌ Invalid game type name! Must be one of: swiss_1, swiss_2_high, swiss_2_low, swiss_3_high, swiss_3_low, quarterfinal_rounds, semifinal_rounds, final_rounds, third_place_rounds")
+            if game_type not in ["swiss_1", "swiss_2_high", "swiss_2_low", "swiss_3_high", "swiss_3_low", "swiss_3_mid", "quarterfinal", "semifinal", "final", "third_place"]:
+                await ctx.send("❌ Invalid game type name! Must be one of: swiss_1, swiss_2_high, swiss_2_low, swiss_3_high, swiss_3_low, swiss_3_mid, quarterfinal, semifinal, final, third_place")
                 return
             # Delete all games and channels from the specified round
             games = bot.game_service.get_games_by_type(game_type=game_type, guild_id=ctx.guild.id)
@@ -722,7 +706,6 @@ async def start_map(ctx):
         await ctx.send("No maps found for this game or all maps have been finished.")
         return
     
-    await _create_dathost_match(ctx, game=game, game_map=game_map)
             
 def setup_logging():
     """Configure logging with file rotation"""
@@ -774,23 +757,14 @@ def setup_vars():
     default_map_pool = "inferno,anubis,nuke,ancient,mirage,train,dust2"
 
     bot.MAP_POOL = os.environ.get("MAP_POOL", default_map_pool).split(',')
-    bot.MAP_POOL_DATHOST = [f"de_{map_name}" for map_name in bot.MAP_POOL]
     bot.SWISS_DECIDER=os.environ.get("SWISS_DECIDER", "bo3")
     bot.SWISS_NOT_DECIDER=os.environ.get("SWISS_NOT_DECIDER", "bo1")
-    bot.QUATERFINAL_ROUND=os.environ.get("QUATERFINAL_ROUND", "bo3")
+    bot.QUARTERFINAL_ROUND=os.environ.get("QUARTERFINAL_ROUND", "bo3")
     bot.SEMIFINAL_ROUND=os.environ.get("SEMIFINAL_ROUND", "bo3")
     bot.FINAL_ROUND=os.environ.get("FINAL_ROUND", "bo5")
     bot.THIRD_PLACE_ROUND=os.environ.get("THIRD_PLACE_ROUND", "bo3")
     bot.TOURNAMENT_NAME=os.environ.get("TOURNAMENT_NAME", None)
     bot.WEBHOOK_BASE_URL=os.environ.get("WEBHOOK_BASE_URL", None)
-    bot.DATHOST_USERNAME=os.environ.get("DATHOST_USERNAME", None)
-    bot.DATHOST_PASSWORD=os.environ.get("DATHOST_PASSWORD", None)
-    bot.DATHOST_WEBHOOK_AUTHORIZATION_HEADER=os.environ.get("DATHOST_WEBHOOK_AUTHORIZATION_HEADER", "1A2B3C4D5E6F7G8H9I0J")
-    bot.DATHOST_GAME_SERVER_ID=os.environ.get("DATHOST_GAME_SERVER_ID", None)
-    bot.DATHOST_SERVER_HOST=os.environ.get("DATHOST_SERVER_HOST", None)
-    bot.DATHOST_SERVER_PORT=os.environ.get("DATHOST_SERVER_PORT", None)
-    bot.DATHOST_SERVER_PASSWORD=os.environ.get("DATHOST_SERVER_PASSWORD", None)
-    bot.DATHOST_RCON_PASSWORD=os.environ.get("DATHOST_RCON_PASSWORD", None)
 
 
 
@@ -1018,7 +992,6 @@ async def _create_server_category(ctx, category_name:str, category_position:int,
             position=category_position, 
             overwrites=overwrites
         )
-        await ctx.send(f"Category {category_name} created")
     else:
         await ctx.send(f"Category {category_name} already created")
     return discord_category
@@ -1033,7 +1006,6 @@ async def _create_server_role(ctx, server_role_name: str) -> discord.Role:
     if discord_server_role is None:  # The role don't exist on discord, create on Discord and upsert on DB
         # Create server role on discord
         discord_server_role = await guild.create_role(name=server_role_name, mentionable=True)
-        await ctx.send(f"Server role {server_role_name} created")
     else:
         await ctx.send(f"Server role {server_role_name} already created")
     return discord_server_role
@@ -1046,7 +1018,6 @@ async def _create_text_channel(ctx, channel_name: str, category: discord.Categor
     discord_text_channel = discord.utils.get(guild.text_channels, name=channel_name, category=category)
     if discord_text_channel is None:
         discord_text_channel = await category.create_text_channel(channel_name, overwrites=overwrites)
-        await ctx.send(f"Channel {channel_name} created")
     else:
         await ctx.send(f"Channel {channel_name} already created")
     return discord_text_channel
@@ -1101,7 +1072,6 @@ async def _set_new_round(ctx):
         game_types = ["third_place", "final"]
     else:
         return
-    await ctx.send(f"Game types -> {game_types}")
     for game_type in game_types:
         await _create_games(ctx, game_type) 
 
@@ -1163,7 +1133,6 @@ async def _create_game(ctx, game: Game, category: discord.CategoryChannel):
     admin_channel_name = f"ADMINS {team_one.name} vs {team_two.name}"
     admin_channel = await _create_text_channel(ctx, channel_name=admin_channel_name, overwrites=admin_overwrites, category=category)
     await admin_channel.send(f"This channel will be used for communicating between org and teams on this game, remember that only admins and users with role {team_one.name}_captain and {team_two.name}_captain can write in this channel.")
-    await admin_channel.send(f"Time of picks and bans, {team_one.name} captain please click a button from below for vetoing a map.")
 
     # Create public channel
     public_overwrites = {
@@ -1205,11 +1174,16 @@ async def _create_game(ctx, game: Game, category: discord.CategoryChannel):
     game.voice_channel_team_one_id = voice1.id
     game.voice_channel_team_two_id = voice2.id
     game.admin_pick_veto_button_message_id = -1
+    game.result_button_message_id = -1
 
     game.id = bot.game_service.create_game(game)
 
-    view = ButtonPickAndBanView(ctx, remaining_maps=bot.MAP_POOL, type="veto", game=game)
-    msg = await admin_channel.send("Veto a map:", view=view)
+    embed = discord.Embed(title=f"{team_one.name} vs {team_two.name} picks, bans and maps", color=discord.Color.blue())
+    game_to_wins = await _get_game_to_wins(ctx, game=game)
+    embed.description = f"Game between {team_one.name} vs {team_two.name} of type {game_to_wins}.\n"
+    embed.add_field(name="Picks and bans", value=f"{team_one.name} time to veto a map:", inline=False)
+    view = ButtonPickAndBanView(ctx, type="veto", game=game)
+    msg = await admin_channel.send(embed=embed, view=view)
     game.admin_pick_veto_button_message_id = msg.id
     view.game = game
     bot.game_service.update_game(game)
@@ -1353,10 +1327,19 @@ async def _get_game_to_wins(ctx, game: Game) -> str:
     game_type = game.game_type
     if game_type == "swiss_1" or game_type == "swiss_2_high" or game_type == "swiss_2_low" or game_type == "swiss_3_low" or game_type == "swiss_3_mid":
         return bot.SWISS_NOT_DECIDER
-    elif game_type == "swiss_3_high" or game_type == "swiss_4_high" or game_type == "swiss_4_low" or game_type == "swiss_5":
+    if game_type == "swiss_3_high" or game_type == "swiss_4_high" or game_type == "swiss_4_low" or game_type == "swiss_5":
         return bot.SWISS_DECIDER
-    else:
-        return bot.__getattribute__(f"{game_type}_ROUND", "bo3")
+    if game_type == "quarterfinal":
+        return bot.QUARTERFINAL_ROUND
+    if game_type == "semifinal":
+        return bot.SEMIFINAL_ROUND
+    if game_type == "third_place":
+        return bot.THIRD_PLACE_ROUND
+    if game_type == "final":
+        return bot.FINAL_ROUND
+        
+
+        
 
 async def _execute_veto(ctx, game: Game, game_to_wins:str, map_name:str):
     """
@@ -1405,49 +1388,42 @@ async def _execute_veto(ctx, game: Game, game_to_wins:str, map_name:str):
     veto = Veto(order_veto=all_order + 1, game_id=game.id, team_id=current_team.id, map_name=map_name, guild_id=guild.id)
     map_names.append(map_name)
     remaining_maps = [map_ for map_ in bot.MAP_POOL if map_ not in map_names]
-    if game_to_wins == "bo1":
-        await admin_channel.send(f"{current_team.name} vetoed {map_name}")
-        if all_order + 1 < 6: # Still vetoing
-            await admin_channel.send(f"{next_team.name} time to veto.\nClick a button for vetoing a map.")
-    elif game_to_wins == "bo3":
+    text = ""
+    if game_to_wins == "bo3":
         if all_order == 2 or all_order == 3: # pick turn
             await admin_channel.send(f"Is pick time!")
             return
-        await admin_channel.send(f"{team_one.name} vetoed {map_name}")
         if all_order + 1 == 2 or all_order + 1 == 3: # time to pick
-            text = f"{next_team.name} time to pick.\nClick a button for picking a map."
-            prefix = "✅"
             next_step = "Pick"
         elif all_order + 1 < 6:
-            text = f"{next_team.name} time to veto.\nClick a button for vetoing a map."
-            prefix = "❌"
             next_step = "Veto"
     elif game_to_wins == "bo5":
         if all_order + 1 > 2:
             await admin_channel.send(f"Is pick time!")
             return
-        await admin_channel.send(f"{team_one.name} vetoed {map_name}")
         if all_order + 1 == 1:
-            text = f"{next_team.name} time to veto.\nClick a button for vetoing a map."
-            prefix = "❌"
             next_step = "Veto"
         elif all_order + 1 < 6:
-            text = f"{next_team.name} time to pick.\nClick a button for picking a map."
-            prefix = "✅"
             next_step = "Pick"
     bot.veto_service.create_veto(veto)
     admin_pick_veto_button_message = await admin_channel.fetch_message(game.admin_pick_veto_button_message_id)
+
+    embed = discord.Embed(title=f"{team_one.name} vs {team_two.name} picks, bans and maps", color=discord.Color.blue())
+    embed.description = f"Game between {team_one.name} vs {team_two.name} of type {game_to_wins}.\n"
     if all_order + 1 == 6: # Remaining map is the decider
         map_names.append(map_name)
         remaining_maps = [map_ for map_ in bot.MAP_POOL if map_ not in map_names]
         pick = Pick(order_pick=all_order + 2, game_id=game.id, team_id=-1, map_name=remaining_maps[0], guild_id=guild.id)
         bot.pick_service.create_pick(pick)
-        await admin_channel.send(f"Decider will be {remaining_maps[0]}.")
+        embed.add_field(name="Picks and bans", value="Maps decided", inline=False)
+        next_step_lower = None
         await _create_game_maps(ctx, game=game)
     else:
         next_step_lower = next_step.lower()
-        view = ButtonPickAndBanView(ctx, remaining_maps=remaining_maps, type=next_step_lower, game=game)
-        await admin_pick_veto_button_message.edit(content=f"{next_step} a map:", view=view)
+        embed.add_field(name="Picks and bans", value=f"{next_team.name} time to {next_step} a map:", inline=False)
+    view = ButtonPickAndBanView(ctx, type=next_step_lower, game=game)
+    
+    await admin_pick_veto_button_message.edit(embed=embed, view=view)
     public_channel = bot.get_channel(game.game_channel_id)
     embed = await _game_embed(ctx, game)
     if public_channel:
@@ -1456,106 +1432,6 @@ async def _execute_veto(ctx, game: Game, game_to_wins:str, map_name:str):
             await msg.edit(embed=embed)
         except Exception as e:
             await admin_channel.send(f"⚠️ Veto added but failed to update display: {e}")
-
-async def _create_dathost_match(ctx, game: Game, game_map:GameMap):
-    """
-    Creates the dathost match
-    """
-
-    # Get all values of dathost
-    team_one = bot.team_service.get_team_by_id(team_id=game.team_one_id)
-    team_two = bot.team_service.get_team_by_id(team_id=game.team_two_id)
-    match_endpoint = f"{game.id}/{game_map.map_name}"
-    players_team_1 = bot.player_service.get_players_by_team_id(team_id=team_one.id)
-    players_team_2 = bot.player_service.get_players_by_team_id(team_id=team_two.id)
-    hostname = f"{game.game_type}: {team_one.name} vs {team_two.name} #{game.id}"
-    
-    # Create a dathost map
-    username = bot.DATHOST_USERNAME
-    if username is None:
-        await ctx.send("❌ Dathost username not set in environment variables.")
-        return None
-    password = bot.DATHOST_PASSWORD
-    if password is None:
-        await ctx.send("❌ Dathost password not set in environment variables.")
-        return None
-    server_id = bot.DATHOST_GAME_SERVER_ID
-    if server_id is None:
-        await ctx.send("❌ Dathost server id not set in environment variables.")
-        return None
-    server_host = bot.DATHOST_SERVER_HOST
-    if server_host is None:
-        await ctx.send("❌ Dathost server host not set in environment variables.")
-        return None
-    server_port= bot.DATHOST_SERVER_PORT
-    if server_port is None:
-        await ctx.send("❌ Dathost server port not set in environment variables.")
-        return None
-    webhook_url = bot.WEBHOOK_BASE_URL
-    rcon_password = bot.DATHOST_RCON_PASSWORD
-    if rcon_password is not None:
-        try:
-            response = await rcon(
-                'hostname', hostname,
-                host=server_host, port=server_port, passwd=rcon_password
-            )
-            print(f"RCON response: {response}")
-        except Exception as e:
-            await ctx.send(f"❌ Error setting hostname: {e}")
-        
-    body = {}
-    body['game_server_id'] = server_id
-    body['team1'] = {}
-    body['team1']['name'] = team_one.name
-    body['team1']['flag'] = ""
-    body['team2'] = {}
-    body['team2']['name'] = team_two.name
-    body['team2']['flag'] = ""
-    body['players'] = []
-    for p in players_team_1:
-        player = {}
-        player['steam_id_64'] = str(p.steamid)
-        player['nickname_override'] = p.nickname
-        player['team'] = "team1"
-        body['players'].append(player)
-    for p in players_team_2:
-        player = {}
-        player['steam_id_64'] = str(p.steamid)
-        player['nickname_override'] = p.nickname
-        player['team'] = "team2"
-        body['players'].append(player)
-    body['settings'] = {}
-    body['settings']['map'] = game_map.map_name
-    body['settings']['team_size'] = 7
-    body['settings']['wait_for_gotv'] = True
-    body['settings']['enable_plugin'] = True
-    body['settings']['enable_tech_pause'] = True
-    if webhook_url is not None:
-        body['webhooks'] = {}
-        body['webhooks']['event_url'] = f"{webhook_url}/match/{match_endpoint}"
-        body['webhooks']['enabled_events'] = []
-        body['webhooks']['enabled_events'].append("*")
-        body['webhooks']['authorization_header'] = bot.DATHOST_WEBHOOK_AUTHORIZATION_HEADER
-    headers = {
-        "accept": "application/json",
-        "content-type": "application/json"
-    }
-    await ctx.send(body)
-    try:
-        response = requests.post(
-            "https://dathost.net/api/0.1/cs2-matches",
-            headers=headers,
-            json=body,
-            auth=(username, password)
-        )
-    except requests.exceptions.RequestException as e:
-        await ctx.send(f"❌ Error creating match: {e}")
-        return None   
-    print(f"Dathost response: {response.status_code} - {response.text}")
-    if response.status_code == 200:
-        await ctx.send(f"Match started in dathost. Connect to ||{server_host}:{server_port} with password {password}||")
-    else:
-        await ctx.send(f"❌ Error creating match: {response.text}")
 
 async def _execute_pick(ctx, game: Game, game_to_wins:str, map_name:str):
     """
@@ -1613,35 +1489,30 @@ async def _execute_pick(ctx, game: Game, game_to_wins:str, map_name:str):
             return
         await admin_channel.send(f"{team_one.name} picked {map_name}")
         if all_order + 1 == 2 or all_order + 1 == 3: # time to pick
-            text = f"{next_team.name} time to pick.\nClick a button for picking a map."
-            prefix = "✅"
             next_step = "Pick"
         elif all_order + 1 < 6:
-            text = f"{next_team.name} time to veto.\nClick a button for vetoing a map."
-            prefix = "❌"
             next_step = "Veto"
     elif game_to_wins == "bo5":
         if all_order + 1 < 2:
             await admin_channel.send(f"Is veto time!")
             return
         if all_order + 1 == 1:
-            text = f"{next_team.name} time to veto.\nClick a button for vetoing a map."
-            prefix = "❌"
             next_step = "Veto"
         elif all_order + 1 < 6:
-            text = f"{next_team.name} time to pick.\nClick a button for picking a map."
-            prefix = "✅"
             next_step = "Pick"
     bot.pick_service.create_pick(pick)
     admin_pick_veto_button_message = await admin_channel.fetch_message(game.admin_pick_veto_button_message_id)
     if all_order + 1 == 6: # Remaining map is the decider
+        map_names.append(map_name)
+        remaining_maps = [map_ for map_ in bot.MAP_POOL if map_ not in map_names]
         pick = Pick(order_pick=all_order + 2, game_id=game.id, team_id=-1, map_name=remaining_maps[0], guild_id=guild.id)
         bot.pick_service.create_pick(pick)
-        await admin_channel.send(f"Decider will be {remaining_maps[0]}.")
+        embed.add_field(name="Picks and bans", value="Maps decided", inline=False)
+        next_step_lower = None
         await _create_game_maps(ctx, game=game)
     else:
         next_step_lower = next_step.lower()
-        view = ButtonPickAndBanView(ctx, remaining_maps=remaining_maps, type=next_step_lower, game=game)
+        view = ButtonPickAndBanView(ctx, type=next_step_lower, game=game)
         await admin_pick_veto_button_message.edit(content=f"{next_step} a map:", view=view)
         
     public_channel = bot.get_channel(game.game_channel_id)
@@ -1743,7 +1614,13 @@ async def _set_result(ctx, game: Game, team_number: int, map_name: str):
     """
     Sets the winner on a game map
     """
+    role_name = "admin"
+    roles = ctx.author.roles
+    if role_name not in [role.name for role in roles]:
+        return
+
     admin_channel = bot.get_channel(game.admin_game_channel_id)
+    admin_result_button_message = await admin_channel.fetch_message(game.result_button_message_id)
 
     if game.team_winner > 0:
         await admin_channel.send("The winner have been already setted.")
@@ -1777,7 +1654,6 @@ async def _set_result(ctx, game: Game, team_number: int, map_name: str):
             team_one_wins = team_one_wins + 1
         elif game_map.team_id_winner == team_two.id:
             team_two_wins = team_two_wins + 1
-    
 
     games_to_wins = await _get_game_to_wins(ctx, game)
     game_winner = None
@@ -1798,6 +1674,7 @@ async def _set_result(ctx, game: Game, team_number: int, map_name: str):
             game_winner = team_two
     
     if game_winner is not None:
+        await admin_result_button_message.delete()
         await admin_channel.send(f"The winner of the game is {game_winner.name}.")
         game.team_winner = game_winner.id
         bot.game_service.update_game(game=game)
@@ -1825,6 +1702,118 @@ async def _set_result(ctx, game: Game, team_number: int, map_name: str):
         if voice_channel_team_two:
             await voice_channel_team_two.delete()
         await _tournament_summary(ctx)
+
+    else:
+        map_name = bot.game_map_service.get_first_not_finished_game_map(guild_id=guild.id, game_id=game.id).map_name
+        view = ButtonResultView(ctx, team_one=team_one, team_two=team_two, map_name=map_name, game=game)
+        embed = discord.Embed(title=f"{team_one.name} vs {team_two.name}", color=discord.Color.blue())
+        embed.description = f"Game between {team_one.name} vs {team_two.name}: Map: {map_name}.\n"
+        await admin_result_button_message.edit(embed=embed, view=view)
+    
+    await _game_summary(ctx, game=game)
+
+async def _pick_veto(ctx, game: Game, map_name: str):
+    """
+    Picks or vetoes a map
+    """
+    guild = ctx.guild
+
+    picks = bot.pick_service.get_all_picks_by_game(guild_id=guild.id, game_id=game.id)
+    vetoes = bot.veto_service.get_all_vetoes_by_game(guild_id=guild.id, game_id=game.id)
+
+    current_team = None
+    next_team = None
+
+    team_one = bot.team_service.get_team_by_id(team_id=game.team_one_id)
+    team_two = bot.team_service.get_team_by_id(team_id=game.team_two_id)
+    if (len(picks) + len(vetoes)) % 2 == 0:
+        current_team = team_one
+        next_team = team_two
+    else:
+        current_team = team_two
+        next_team = team_one
+        
+    admin_channel = bot.get_channel(game.admin_game_channel_id)
+    role_name = f"{current_team.name}_captain"
+    roles = ctx.author.roles
+    if role_name not in [role.name for role in roles]:
+        message = f"You are not the captain of {current_team.name}."
+        await admin_channel.send(message)
+        return
+
+    game_to_wins = await _get_game_to_wins(ctx, game)
+    if game_to_wins == "bo1":
+        if len(vetoes) < 6:
+            veto = Veto(order_veto=len(vetoes) + 1, game_id=game.id, team_id=current_team.id, map_name=map_name, guild_id=guild.id)
+            veto.id = bot.veto_service.create_veto(veto)
+            vetoes.append(veto)
+    if game_to_wins == "bo3":
+        if len(vetoes) < 2:
+            veto = Veto(order_veto=len(vetoes) + 1, game_id=game.id, team_id=current_team.id, map_name=map_name, guild_id=guild.id)
+            veto.id = bot.veto_service.create_veto(veto)
+            vetoes.append(veto)
+        elif (len(vetoes) == 2 or len(vetoes) == 3) and len(picks) == 2:
+            veto = Veto(order_veto=len(vetoes) + 1, game_id=game.id, team_id=current_team.id, map_name=map_name, guild_id=guild.id)
+            veto.id = bot.veto_service.create_veto(veto)
+            vetoes.append(veto)
+        elif (len(vetoes) == 2 and len(picks) < 2):
+            pick = Pick(order_pick=len(picks) + 1, game_id=game.id, team_id=current_team.id, map_name=map_name, guild_id=guild.id)
+            pick.id = bot.pick_service.create_pick(pick)
+            picks.append(pick)
+    if game_to_wins == "bo5":
+        if len(vetoes) < 2:
+            veto = Veto(order_veto=len(vetoes) + 1, game_id=game.id, team_id=current_team.id, map_name=map_name, guild_id=guild.id)
+            veto.id = bot.veto_service.create_veto(veto)
+            vetoes.append(veto)
+        elif (len(vetoes) == 2 and len(picks) < 4):
+            pick = Pick(order_pick=len(picks) + 1, game_id=game.id, team_id=current_team.id, map_name=map_name, guild_id=guild.id)
+            pick.id = bot.pick_service.create_pick(pick)
+            picks.append(pick)
+
+    next_step = ""
+    if game_to_wins == "bo1":
+        if len(vetoes) < 6:
+            next_step = "veto"
+    if game_to_wins == "bo3":
+        if len(vetoes) < 2 or len(picks) == 2:
+            next_step = "veto"
+        elif (len(vetoes) == 2 and len(picks) < 2):
+            next_step = "pick"
+    if game_to_wins == "bo5":
+        if len(vetoes) < 2:
+            next_step = "veto"
+        elif (len(vetoes) == 2 and len(picks) < 4):
+            next_step = "pick"
+    label = ""
+    if len(picks) + len(vetoes) == 6:
+        # for each veto and pick, get the map name and set it into an array
+        map_names = [veto.map_name for veto in vetoes]
+        map_names += [pick.map_name for pick in picks]
+        remaining_maps = [map_ for map_ in bot.MAP_POOL if map_ not in map_names]
+        # create a pick with the remaining map
+        pick = Pick(order_pick=len(picks) + 1, game_id=game.id, team_id=-1, map_name=remaining_maps[0], guild_id=guild.id)
+        bot.pick_service.create_pick(pick)
+        game_maps = await _create_game_maps(ctx, game=game)
+        next_step = None
+        label = "Maps decided"
+        
+        map_name = min(game_maps, key=lambda x: x.game_number).map_name
+        view = ButtonResultView(ctx, team_one=team_one, team_two=team_two, map_name=map_name, game=game)
+        embed = discord.Embed(title=f"{team_one.name} vs {team_two.name}", color=discord.Color.blue())
+        embed.description = f"Game between {team_one.name} vs {team_two.name}: Map: {map_name}.\n"
+        msg = await admin_channel.send(embed=embed, view=view)
+        game.result_button_message_id = msg.id
+        bot.game_service.update_game(game)
+    else:
+        label = f"{next_team.name} time to {next_step} a map:"
+    
+    admin_pick_veto_button_message = await admin_channel.fetch_message(game.admin_pick_veto_button_message_id)
+    view = ButtonPickAndBanView(ctx, type=next_step, game=game)
+    embed = discord.Embed(title=f"{team_one.name} vs {team_two.name} picks, bans and maps", color=discord.Color.blue())
+    embed.description = f"Game between {team_one.name} vs {team_two.name} of type {game_to_wins}.\n"
+    embed.add_field(name="Picks and bans", value=label, inline=False)
+    await admin_pick_veto_button_message.edit(embed=embed, view=view)
+    await _game_summary(ctx, game=game)
 
 # API paths
 @app.get('/match/{game_id}/{map_name}')

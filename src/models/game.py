@@ -23,11 +23,12 @@ class Game:
     guild_id: Optional[int] = None
     team_one_id: Optional[int] = None
     team_two_id: Optional[int] = None
-    team_winner: Optional[int] = None
+    team_winner: Optional[int] = -1
     game_type: Optional[str] = None
     game_channel_id: Optional[int] = None
     admin_game_channel_id: Optional[int] = None
     voice_channel_team_one_id: Optional[int] = None
     voice_channel_team_two_id: Optional[int] = None
     public_game_message_id: Optional[int] = None
-    admin_pick_veto_button_message_id: Optional[int] = None
+    admin_pick_veto_button_message_id: Optional[int] = -1
+    result_button_message_id: Optional[int] = -1

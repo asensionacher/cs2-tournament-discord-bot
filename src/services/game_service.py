@@ -124,12 +124,14 @@ class GameService:
             UPDATE game SET guild_id = ?, team_one_id = ?, team_two_id = ?, 
             game_type = ?, game_channel_id = ?, admin_game_channel_id = ?,
             voice_channel_team_one_id = ?, voice_channel_team_two_id = ?,
-            public_game_message_id = ?, team_winner = ?, admin_pick_veto_button_message_id = ?
+            public_game_message_id = ?, team_winner = ?, admin_pick_veto_button_message_id = ?,
+            result_button_message_id = ?
             WHERE id = ?
             """,
             (game.guild_id, game.team_one_id, game.team_two_id,
              game.game_type, game.game_channel_id, game.admin_game_channel_id,
              game.voice_channel_team_one_id, game.voice_channel_team_two_id, 
-             game.public_game_message_id, game.team_winner, game.admin_pick_veto_button_message_id, game.id)
+             game.public_game_message_id, game.team_winner, game.admin_pick_veto_button_message_id,
+             game.result_button_message_id, game.id)
         )
         self.conn.commit()
