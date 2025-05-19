@@ -8,6 +8,10 @@ services:
     volumes:
       - sqlite_data:/usr/src/app/data # Named volume for SQLite
       - /app/logs # Anonymous volume for logs
+      - match_configs:/usr/src/app/match_configs
+      - match_logs:/usr/src/app/match_logs
 
 volumes:
   sqlite_data: # Define the named volume
+  match_configs:
+  match_logs:

@@ -13,6 +13,9 @@ from discord.ext import commands
 from discord.ui import View, Button
 import re
 
+import asyncio
+from threading import Thread
+
 import requests
 from rcon.source import rcon
 
@@ -40,6 +43,8 @@ from services.veto_service import VetoService
 from services.pick_service import PickService
 from services.game_map_service import GameMapService
 from services.summary_service import SummaryService
+import uvicorn
+import uuid
 
 description = '''
 Bot for creating a Counter Strike Tournament with 16 teams,
@@ -689,14 +694,15 @@ async def im_all_teams_captain(ctx):
 
 @bot.command()
 @discord.ext.commands.has_role("admin")
-async def start_map(ctx):
+async def start_live_game(ctx):
     """
-    Start the current map for the current game. 
+    Start the game. 
     Format: !start_map
     """
     guild = ctx.guild
     channel_id = ctx.channel.id
     game = bot.game_service.get_game_by_admin_game_channel_id(admin_game_channel_id=channel_id)
+    admin_game_channel = bot.get_channel(channel_id)
     if game is None:
         await ctx.send("This must be sent from a admin game channel.")
         return
@@ -705,6 +711,90 @@ async def start_map(ctx):
     if game_map is None:
         await ctx.send("No maps found for this game or all maps have been finished.")
         return
+    json = await _get_matchzy_values(ctx, game=game)
+
+    try:
+        # Save JSON to local file
+        os.makedirs('/usr/src/app/match_configs', exist_ok=True)
+        filename = f"/usr/src/app/match_configs/{game.id}.json"
+        with open(filename, 'w') as f:
+            f.write(json)
+            # Send JSON file to Discord channel
+        
+        file = discord.File(filename, filename=f"match_configs_game_{game.id}.json")
+        await admin_game_channel.send("Match config:", file=file)
+
+        await admin_game_channel.send(f"{bot.WEBHOOK_BASE_URL}/match_configs/{game.id}.json")
+        await admin_game_channel.send(f"matchzy_loadmatch_url {bot.WEBHOOK_BASE_URL}/match_configs/{game.id}.json")
+        
+        response = await rcon(
+            'matchzy_loadmatch_url' f"\"{bot.WEBHOOK_BASE_URL}/match_configs/{game.id}.json\"",
+            host=bot.SERVER_IP, port=int(bot.SERVER_PORT), passwd=bot.RCON_PASSWORD
+        )
+        await ctx.send(response)
+        
+        response = await rcon(
+            'matchzy_remote_log_url', f"{bot.WEBHOOK_BASE_URL}/match_logs/{game.id}",
+            host=bot.SERVER_IP, port=int(bot.SERVER_PORT), passwd=bot.RCON_PASSWORD
+        )
+        print(response)
+
+    except Exception as e:
+        logging.error(f"Error saving match config: {e}")
+        await ctx.send(f"❌ Error saving match config: {e}")
+
+async def _get_matchzy_values(ctx, game: Game) -> str:
+    match_id = str(game.id)
+    team_one = bot.team_service.get_team_by_id(game.team_one_id) 
+    team_two = bot.team_service.get_team_by_id(game.team_two_id) 
+
+    players_team_one = bot.player_service.get_players_by_team_id(team_one.id)
+    players_team_two = bot.player_service.get_players_by_team_id(team_two.id)
+
+    game_to_wins = await _get_game_to_wins(ctx, game=game)
+    num_maps = int(game_to_wins.replace('bo',''))
+
+    game_maps = bot.game_map_service.get_all_game_maps_by_game(guild_id=ctx.guild.id, game_id=game.id)
+
+    data = {}
+    data['matchid'] = match_id
+
+    team1 = {}
+    team1['name'] = team_one.name
+    players = {}
+    for player in players_team_one:
+        players[player.steamid] = player.nickname
+    team1['players'] = players
+    data['team1'] = team1
+
+    team2 = {}
+    team2['name'] = team_two.name
+    players = {}
+    for player in players_team_two:
+        players[player.steamid] = player.nickname
+    team2['players'] = players
+    data['team2'] = team2
+
+    data['num_maps'] = num_maps
+
+    maplist = []
+    for game_map in game_maps:
+        maplist.append(game_map.map_name)
+    data['maplist'] = maplist
+
+    map_sides = ["team1_ct", "team2_ct", "knife"]
+    data['map_sides'] = map_sides
+
+    data['clinch_series'] = True
+
+    data['players_per_team'] = 5
+
+    hostname = f"{bot.TOURNAMENT_NAME}: {team_one.name} vs {team_two.name} #{game.id}"
+    cvars = {}
+    cvars['hostname'] = hostname
+    data['cvars'] = cvars
+
+    return json.dumps(data)    
     
             
 def setup_logging():
@@ -765,6 +855,9 @@ def setup_vars():
     bot.THIRD_PLACE_ROUND=os.environ.get("THIRD_PLACE_ROUND", "bo3")
     bot.TOURNAMENT_NAME=os.environ.get("TOURNAMENT_NAME", None)
     bot.WEBHOOK_BASE_URL=os.environ.get("WEBHOOK_BASE_URL", None)
+    bot.SERVER_IP=os.environ.get("SERVER_IP", None)
+    bot.SERVER_PORT=os.environ.get("SERVER_PORT", None)
+    bot.RCON_PASSWORD=os.environ.get("RCON_PASSWORD", None)
 
 
 
@@ -1816,13 +1909,45 @@ async def _pick_veto(ctx, game: Game, map_name: str):
     await _game_summary(ctx, game=game)
 
 # API paths
-@app.get('/match/{game_id}/{map_name}')
-async def get_users(game_id: int, map_name: str):
-    return {"user_data": {
-        "id": user_id,
-        "message": "Hello, " + user_name,
-    }}
-    # match_endpoint = f"{game.id}/{game_map.map_name}"
+@app.get('/match_configs')
+async def match_configs():
+    return {"message": "Hello World", "status": 200}
+
+@app.get('/match_configs/{file_name}')
+async def match_configs_file(file_name: str):
+    # Read the corresponding JSON file
+    try:
+        with open(f'/usr/src/app/match_configs/{file_name}', 'r') as f:
+            return json.loads(f.read())
+    except FileNotFoundError:
+        return {"error": "Match config file not found"}
+
+@app.post('/match_logs/{game_id}')
+async def match_logs(file_name: str):
+    # Read the corresponding JSON file
+    # Generate random filename and save JSON from request body
+    try:
+
+        # Create directory if it doesn't exist
+        os.makedirs('/usr/src/app/match_logs', exist_ok=True)
+
+        # Generate random filename
+        random_filename = f"{str(uuid.uuid4())}.json"
+        filepath = f'/usr/src/app/match_logs/{random_filename}'
+
+        # Save request body as JSON file
+        with open(filepath, 'w') as f:
+            json.dump(await requests.request.json(), f)
+
+        return {"message": "Log saved successfully", "filename": random_filename}
+    except Exception as e:
+        return {"error": f"Failed to save log: {str(e)}"}
+
+def run_bot():
+    bot.run(os.environ["DISCORD_BOT_TOKEN"])
+
+def run_api():
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 
 def main():
     try:
@@ -1833,7 +1958,18 @@ def main():
         setup_database()
         setup_vars()
         
-        bot.run(os.environ["DISCORD_BOT_TOKEN"])
+        # Create threads for bot and API
+        bot_thread = Thread(target=run_bot)
+        api_thread = Thread(target=run_api)
+        
+        # Start both threads
+        bot_thread.start()
+        api_thread.start()
+        
+        # Wait for both threads
+        bot_thread.join()
+        api_thread.join()
+        
     except KeyError:
         logging.critical("Missing DISCORD_BOT_TOKEN in environment variables")
     except Exception as e:
