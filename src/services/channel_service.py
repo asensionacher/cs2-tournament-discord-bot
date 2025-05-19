@@ -29,7 +29,7 @@ class ChannelService:
     def get_channel_by_name(self, channel_name: str, guild_id: int) -> Optional[Channel]:
         """Fetch a channel by channel_name for a guild id"""
         row = self.conn.execute(
-            f"SELECT * FROM channel WHERE channel_name = '{channel_name}' AND guild_id = ?", 
+            f"SELECT * FROM channel WHERE channel_name = ? AND guild_id = ?", 
             (channel_name, guild_id)
         ).fetchone()
         return Channel(*row) if row else None

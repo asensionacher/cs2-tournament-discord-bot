@@ -35,6 +35,14 @@ class VetoService:
                                          (guild_id, game_id))
         ]
 
+    def get_all_vetoes_by_game_id_only(self, game_id: int) -> List[Veto]:
+        """Fetch all vetoes by game id"""
+        return [
+            Veto(*row) 
+            for row in self.conn.execute("SELECT * FROM veto WHERE game_id = ?", 
+                                         (game_id, ))
+        ]
+
     def delete_veto_by_id(self, id: int):
         """Delete veto by id"""
         cursor = self.conn.execute(

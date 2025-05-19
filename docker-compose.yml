@@ -10,8 +10,10 @@ services:
       - /app/logs # Anonymous volume for logs
       - match_configs:/usr/src/app/match_configs
       - match_logs:/usr/src/app/match_logs
+      - match_demos:/usr/src/app/match_demos
 
 volumes:
   sqlite_data: # Define the named volume
   match_configs:
   match_logs:
+  match_demos:

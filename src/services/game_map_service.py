@@ -58,6 +58,17 @@ class GameMapService:
             return GameMap(*row)
         return None
 
+    def get_by_game_id_game_number_game_map(self, game_id: int, game_number: int) -> Optional[GameMap]:
+        """Fetch the first game_map with a lower game_number that is not finished"""
+        cursor = self.conn.execute("""SELECT * FROM game_map 
+                            WHERE game_id = ? AND game_number <= ?
+                            """, 
+                         (game_id, game_number))
+        row = cursor.fetchone()
+        if row:
+            return GameMap(*row)
+        return None
+
 
     def delete_game_map_by_id(self, id: int):
         """Delete game_map by id"""

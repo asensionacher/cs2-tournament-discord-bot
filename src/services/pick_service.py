@@ -34,6 +34,14 @@ class PickService:
             for row in self.conn.execute("SELECT * FROM pick WHERE guild_id = ? AND game_id = ?", 
                                          (guild_id, game_id))
         ]
+
+    def get_all_picks_by_game_id_only(self, game_id: int) -> List[Pick]:
+        """Fetch all picks by game id"""
+        return [
+            Pick(*row) 
+            for row in self.conn.execute("SELECT * FROM pick WHERE game_id = ?", 
+                                         (game_id, ))
+        ]
     def get_all_picks_by_game_ordered(self, guild_id: int, game_id: int) -> List[Pick]:
         """Fetch all picks by game id ordered by order_pick ASC"""
         return [
