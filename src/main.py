@@ -542,34 +542,41 @@ async def start_live_game(ctx):
         file = discord.File(filename, filename=f"match_configs_game_{game.id}.json")
         await admin_game_channel.send("Match config:", file=file)
 
-        await admin_game_channel.send(f"Executing rcon `matchzy_loadmatch_url \"{bot.WEBHOOK_BASE_URL}/match_configs/{game.id}.json\"`")
+        matchzy_loadmatch_url = f"\"{bot.WEBHOOK_BASE_URL}/match_configs/{game.id}.json\""
+        await admin_game_channel.send(f"Executing rcon `matchzy_loadmatch_url {matchzy_loadmatch_url}`")
         
         response = await rcon(
-            'matchzy_loadmatch_url' f"\"{bot.WEBHOOK_BASE_URL}/match_configs/{game.id}.json\"",
+            'matchzy_loadmatch_url', f"\"{bot.WEBHOOK_BASE_URL}/match_configs/{game.id}.json\"",
             host=bot.SERVER_IP, port=int(bot.SERVER_PORT), passwd=bot.RCON_PASSWORD
         )
         await admin_game_channel.send(response)
         
-        await admin_game_channel.send(f"Executing rcon `matchzy_remote_log_url \"{bot.WEBHOOK_BASE_URL}/match_logs/{game.id}.json\"`")
+        matchzy_remote_log_url = f"\"{bot.WEBHOOK_BASE_URL}/match_logs/{game.id}\""
+        await admin_game_channel.send(f"Executing rcon `matchzy_remote_log_url {matchzy_remote_log_url}`")
         response = await rcon(
-            'matchzy_remote_log_url', f"\"{bot.WEBHOOK_BASE_URL}/match_logs/{game.id}\"",
+            'matchzy_remote_log_url', matchzy_remote_log_url,
             host=bot.SERVER_IP, port=int(bot.SERVER_PORT), passwd=bot.RCON_PASSWORD
         )
-        await admin_game_channel.send(response)
+        if response is not None and response != "":
+            await admin_game_channel.send(response)
         
-        await admin_game_channel.send(f"Executing rcon `matchzy_remote_log_url \"{bot.WEBHOOK_BASE_URL}/match_logs/{game.id}.json\"`")
+        
+        matchzy_demo_upload_url = f"\"{bot.WEBHOOK_BASE_URL}/match_demos/{game.id}\""
+        await admin_game_channel.send(f"Executing rcon `matchzy_demo_upload_url {matchzy_demo_upload_url}`")
         response = await rcon(
-            'matchzy_demo_upload_url', f"\"{bot.WEBHOOK_BASE_URL}/match_demos/{game.id}\"",
+            'matchzy_demo_upload_url', matchzy_demo_upload_url,
             host=bot.SERVER_IP, port=int(bot.SERVER_PORT), passwd=bot.RCON_PASSWORD
         )
-        await admin_game_channel.send(response)
-        
+        if response is not None and response != "":
+            await admin_game_channel.send(response)
+                
         await admin_game_channel.send(f"Executing rcon `matchzy_minimum_ready_required 1`")
         response = await rcon(
             'matchzy_minimum_ready_required','1',
             host=bot.SERVER_IP, port=int(bot.SERVER_PORT), passwd=bot.RCON_PASSWORD
         )
-        await admin_game_channel.send(response)
+        if response is not None and response != "":
+            await admin_game_channel.send(response)
 
         matchzy_chat_prefix = "\"[{Green}" + bot.TOURNAMENT_NAME + "{Default}]\""
         await admin_game_channel.send(f"Executing rcon `matchzy_chat_prefix {matchzy_chat_prefix}`")
@@ -577,7 +584,8 @@ async def start_live_game(ctx):
             'matchzy_chat_prefix', matchzy_chat_prefix,
             host=bot.SERVER_IP, port=int(bot.SERVER_PORT), passwd=bot.RCON_PASSWORD
         )
-        await admin_game_channel.send(response)
+        if response is not None and response != "":
+            await admin_game_channel.send(response)
 
         matchzy_admin_chat_prefix = "\"[{Red}Admin{Default}]\""
         await admin_game_channel.send("Executing rcon `matchzy_admin_chat_prefix {matchzy_admin_chat_prefix}`")
@@ -585,14 +593,16 @@ async def start_live_game(ctx):
             'matchzy_admin_chat_prefix', matchzy_admin_chat_prefix,
             host=bot.SERVER_IP, port=int(bot.SERVER_PORT), passwd=bot.RCON_PASSWORD
         )
-        await admin_game_channel.send(response)
+        if response is not None and response != "":
+            await admin_game_channel.send(response)
 
         await admin_game_channel.send("Executing rcon `matchzy_hostname_format \"\"`")
         response = await rcon(
             'matchzy_hostname_format', "\"\"",
             host=bot.SERVER_IP, port=int(bot.SERVER_PORT), passwd=bot.RCON_PASSWORD
         )
-        await admin_game_channel.send(response)
+        if response is not None and response != "":
+            await admin_game_channel.send(response)
 
     except Exception as e:
         logging.error(f"Error saving match config: {e}")
@@ -638,7 +648,7 @@ async def _get_matchzy_values(game: Game) -> str:
     data['map_sides'] = map_sides
 
     data['clinch_series'] = True
-    data['skip_veto'] = True
+    data['skip_veto'] = False
 
     data['players_per_team'] = 5
 
