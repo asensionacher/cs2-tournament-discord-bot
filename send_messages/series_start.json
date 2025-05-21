@@ -1,0 +1,13 @@
+{
+  "event": "series_start",
+  "matchid": 14272,
+  "num_maps": 1,
+  "team1": {
+    "id": "2843",
+    "name": "Natus Vincere"
+  },
+  "team2": {
+    "id": "2843",
+    "name": "Natus Vincere"
+  }
+}

@@ -578,7 +578,7 @@ async def start_live_game(ctx):
         if response is not None and response != "":
             await admin_game_channel.send(response)
 
-        matchzy_chat_prefix = "\"[{Green}" + bot.TOURNAMENT_NAME + "{Default}]\""
+        matchzy_chat_prefix = "[{Green}" + bot.TOURNAMENT_NAME + "{Default}]"
         await admin_game_channel.send(f"Executing rcon `matchzy_chat_prefix {matchzy_chat_prefix}`")
         response = await rcon(
             'matchzy_chat_prefix', matchzy_chat_prefix,
@@ -587,7 +587,7 @@ async def start_live_game(ctx):
         if response is not None and response != "":
             await admin_game_channel.send(response)
 
-        matchzy_admin_chat_prefix = "\"[{Red}Admin{Default}]\""
+        matchzy_admin_chat_prefix = "[{Red}Admin{Default}]"
         await admin_game_channel.send("Executing rcon `matchzy_admin_chat_prefix {matchzy_admin_chat_prefix}`")
         response = await rcon(
             'matchzy_admin_chat_prefix', matchzy_admin_chat_prefix,
@@ -599,6 +599,30 @@ async def start_live_game(ctx):
         await admin_game_channel.send("Executing rcon `matchzy_hostname_format \"\"`")
         response = await rcon(
             'matchzy_hostname_format', "\"\"",
+            host=bot.SERVER_IP, port=int(bot.SERVER_PORT), passwd=bot.RCON_PASSWORD
+        )
+        if response is not None and response != "":
+            await admin_game_channel.send(response)
+
+        await admin_game_channel.send("Executing rcon `matchzy_knife_enabled_default \"\"`")
+        response = await rcon(
+            'matchzy_knife_enabled_default', "\"true\"",
+            host=bot.SERVER_IP, port=int(bot.SERVER_PORT), passwd=bot.RCON_PASSWORD
+        )
+        if response is not None and response != "":
+            await admin_game_channel.send(response)
+
+        await admin_game_channel.send("Executing rcon `matchzy_kick_when_no_match_loaded \"\"`")
+        response = await rcon(
+            'matchzy_kick_when_no_match_loaded', "\"true\"",
+            host=bot.SERVER_IP, port=int(bot.SERVER_PORT), passwd=bot.RCON_PASSWORD
+        )
+        if response is not None and response != "":
+            await admin_game_channel.send(response)
+
+        await admin_game_channel.send("Executing rcon `matchzy_enable_damage_report \"\"`")
+        response = await rcon(
+            'matchzy_enable_damage_report', "\"false\"",
             host=bot.SERVER_IP, port=int(bot.SERVER_PORT), passwd=bot.RCON_PASSWORD
         )
         if response is not None and response != "":
@@ -618,8 +642,6 @@ async def _get_matchzy_values(game: Game) -> str:
 
     game_to_wins = await _get_game_to_wins(game=game)
     num_maps = int(game_to_wins.replace('bo',''))
-
-    game_maps = bot.game_map_service.get_all_game_maps_by_game(guild_id=game.guild_id, game_id=game.id)
 
     data = {}
     data['matchid'] = match_id
@@ -644,18 +666,13 @@ async def _get_matchzy_values(game: Game) -> str:
 
     data['maplist'] = bot.MAP_POOL
 
-    map_sides = ["team1_ct", "team2_ct", "knife"]
+    map_sides = ["knife", "team1_ct", "team2_ct"]
     data['map_sides'] = map_sides
 
     data['clinch_series'] = True
     data['skip_veto'] = False
 
     data['players_per_team'] = 5
-
-    hostname = f"{bot.TOURNAMENT_NAME}: {team_one.name} vs {team_two.name} #{game.id}"
-    cvars = {}
-    cvars['hostname'] = hostname
-    data['cvars'] = cvars
 
     return json.dumps(data, indent=4)    
     
@@ -1494,15 +1511,20 @@ async def match_logs(game_id: str, request: Request):
         file = discord.File(filepath, filename=random_filename)
         
         event_value = data.get('event')
-        logging.error(event_value)
+
+        logging.error(data)
         
         if event_value == "series_start":  
-            await asyncio.wait_for(public_channel.send("Starting game"), timeout=5)
+            #await asyncio.wait_for(public_channel.send("Starting game"), timeout=5)
+            await public_channel.send("Starting game")
             
-        if event_value == "map_result": 
+        elif event_value == "map_result": 
+            await public_channel.send("map_result")
             winner = data.get('winner').get('team')
             map_number = int(data.get('map_number')) + 1
-            map_name = (bot.game_map_service.get_by_game_id_game_number_game_map(game_id=game_id, game_number=map_number)).map_name
+            game_map = bot.game_map_service.get_by_game_id_game_number_game_map(game_id=game_id, game_number=map_number)
+            await public_channel.send(map_number)
+            map_name = game_map.map_name
             team_winner = None
             team_looser = None
             team_number = -1
@@ -1522,8 +1544,7 @@ async def match_logs(game_id: str, request: Request):
                         """
             await public_channel.send(message, file=file)
             await _set_result(game=game, team_number=team_number, map_name = map_name)
-        if event_value == "map_vetoed":
-            team_vetoer = None
+        elif event_value == "map_vetoed":
             vetoer = data.get('team')
             team_vetoer_id = -1
             if vetoer == "team1":
@@ -1546,9 +1567,8 @@ async def match_logs(game_id: str, request: Request):
                     msg = await public_channel.fetch_message(game.public_game_message_id)
                     await msg.edit(embed=embed)
                 except Exception as e:
-                    await admin_channel.send(f"⚠️ Veto added but failed to update display: {e}")
-        if event_value == "map_picked":
-            team_picker = None
+                    await public_channel.send(f"⚠️ Veto added but failed to update display: {e}")
+        elif event_value == "map_picked":
             picker = data.get('team')
             team_picker_id = -1
             if picker == "team1":
@@ -1565,7 +1585,7 @@ async def match_logs(game_id: str, request: Request):
             map_name = data.get('map_name')
             pick = Pick(order_pick=all_order + 1, game_id=game_id, team_id=team_picker_id, map_name=map_name, guild_id=game.guild_id)
             bot.pick_service.create_pick(pick)
-            map_number = int(data.get('map_number')) + 1
+            map_number = int(data.get('map_number'))
             game_map = GameMap(game_number=map_number, map_name=pick.map_name, game_id=game.id, team_id_winner=-1, guild_id=game.guild_id)
             bot.game_map_service.create_game_map(game_map)             
             embed = await _game_embed(game)
@@ -1574,13 +1594,13 @@ async def match_logs(game_id: str, request: Request):
                     msg = await public_channel.fetch_message(game.public_game_message_id)
                     await msg.edit(embed=embed)
                 except Exception as e:
-                    await admin_channel.send(f"⚠️ Pick added but failed to update display: {e}")
+                    await public_channel.send(f"⚠️ Pick added but failed to update display: {e}")
 
         await _tournament_summary(guild_id=guild_id)
         return {"message": "Log saved successfully", "filename": random_filename}
     except Exception as e:
-        return {"error": f"Failed to save log: {str(e)}"}
         logging.error(f"Failed to save log: {str(e)}")
+        return {"error": f"Failed to save log: {str(e)}"}
 
 @app.post('/match_demos/{game_id}')
 async def match_demos(game_id: str, request: Request):

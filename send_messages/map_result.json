@@ -1,0 +1,31 @@
+{
+  "event": "map_result",
+  "matchid": 14272,
+  "map_number": 0,
+  "team1": {
+    "id": "2843",
+    "name": "Natus Vincere",
+    "series_score": 0,
+    "score": 14,
+    "score_ct": 10,
+    "score_t": 14,
+    "players": [],
+    "side": "ct",
+    "starting_side": "ct"
+  },
+  "team2": {
+    "id": "2843",
+    "name": "Natus Vincere",
+    "series_score": 0,
+    "score": 14,
+    "score_ct": 10,
+    "score_t": 14,
+    "players": [],
+    "side": "ct",
+    "starting_side": "ct"
+  },
+  "winner": {
+    "side": "ct",
+    "team": "team1"
+  }
+}
