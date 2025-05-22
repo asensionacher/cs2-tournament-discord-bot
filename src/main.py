@@ -571,18 +571,32 @@ async def autovetoautoresults(ctx):
     autovetoautoresults 
     Format: !autovetoautoresults
     """
-    guild = ctx.guild
-
     try:
-        await ctx.send("AUTOVETO")
-        await _auto_veto(guild_id=guild.id)
-        await ctx.send("AUTORESULT")
-        await _auto_result(guild_id=guild.id)
-                
-    except Exception as e:
-        logging.error(f"Error autovetoautoresult: {e}")
-        await ctx.send(f"❌ Error autovetoautoresult: {e}")
+        guild = ctx.guild
+        response = []
+        for r in await _auto_veto(guild_id=guild.id):
+            response.append(r)
+        for r in await _auto_result(guild_id=guild.id):
+            response.append(r) 
 
+        # Create directory if doesn't exist
+        os.makedirs('response', exist_ok=True)
+        
+        # Write response to file
+        filename = f"response/response_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.sh"
+        with open(filename, 'w') as f:
+            for line in response:
+                f.write(f"{line}\n")
+
+        # Send file to channel
+        file = discord.File(filename)
+        await ctx.send("Response file:", file=file)
+
+    except Exception as e:
+        logging.error(f"Error during response_to_file command: {e}")
+        await ctx.send(f"❌ Error generating response file: {e}")
+        
+    
 
 async def _get_matchzy_values(game: Game) -> str:
     match_id = str(game.id)
@@ -1432,92 +1446,84 @@ async def _execute_rcon(*command: str) -> str :
     response = command
     return response
 
-async def _auto_veto(guild_id: int):
+async def _auto_veto(guild_id: int) -> list:
     # Get all not finished games
-    try:
-        games = bot.game_service.get_all_games_not_finished(guild_id=guild_id)
-        for game in games:
-            games_to_wins = await _get_game_to_wins(game)
-            if games_to_wins == "bo1":
-                response = await _send_veto(matchid=game.id, team="team1", map_name="inferno")
-                logging.error(response)
-                await _send_veto(matchid=game.id, team="team2", map_name="anubis")
-                await _send_veto(matchid=game.id, team="team1", map_name="train")
-                await _send_veto(matchid=game.id, team="team2", map_name="dust2")
-                await _send_veto(matchid=game.id, team="team1", map_name="mirage")
-                await _send_veto(matchid=game.id, team="team2", map_name="ancient")
-                await _send_pick(matchid=game.id, team="null", map_name="nuke")
-            elif games_to_wins == "bo3":
-                await _send_veto(matchid=game.id, team="team1", map_name="inferno")
-                await _send_veto(matchid=game.id, team="team2", map_name="anubis")
-                await _send_pick(matchid=game.id, team="team1", map_name="train")
-                await _send_pick(matchid=game.id, team="team2", map_name="dust2")
-                await _send_veto(matchid=game.id, team="team1", map_name="mirage")
-                await _send_veto(matchid=game.id, team="team2", map_name="ancient")
-                await _send_pick(matchid=game.id, team="null", map_name="nuke")
-            elif games_to_wins == "bo5":
-                await _send_veto(matchid=game.id, team="team1", map_name="inferno")
-                await _send_veto(matchid=game.id, team="team2", map_name="anubis")
-                await _send_pick(matchid=game.id, team="team1", map_name="train")
-                await _send_pick(matchid=game.id, team="team2", map_name="dust2")
-                await _send_pick(matchid=game.id, team="team1", map_name="mirage")
-                await _send_pick(matchid=game.id, team="team2", map_name="ancient")
-                await _send_pick(matchid=game.id, team="null", map_name="nuke")
-    except Exception as e:
-        logging.error(f"Failed to _auto_veto: {str(e)}")
-        return {"error": f"Failed to _auto_veto: {str(e)}"}
-    
-
-async def _auto_result(guild_id: int):
-    # Get all not finished games
+    response = []
     games = bot.game_service.get_all_games_not_finished(guild_id=guild_id)
     for game in games:
         games_to_wins = await _get_game_to_wins(game)
         if games_to_wins == "bo1":
-            await _send_result(matchid=game.id, map_number=0, winner_team="team2")
+            response.append(await _send_veto(matchid=game.id, team="team1", map_name="inferno"))
+            response.append(await _send_veto(matchid=game.id, team="team2", map_name="anubis"))
+            response.append(await _send_veto(matchid=game.id, team="team1", map_name="train"))
+            response.append(await _send_veto(matchid=game.id, team="team2", map_name="dust2"))
+            response.append(await _send_veto(matchid=game.id, team="team1", map_name="mirage"))
+            response.append(await _send_veto(matchid=game.id, team="team2", map_name="ancient"))
+            response.append(await _send_pick(matchid=game.id, team="decider", map_name="nuke", map_number=1))
         elif games_to_wins == "bo3":
-            await _send_result(matchid=game.id, map_number=0, winner_team="team1")
-            await _send_result(matchid=game.id, map_number=1, winner_team="team2")
-            await _send_result(matchid=game.id, map_number=2, winner_team="team1")
+            response.append(await _send_veto(matchid=game.id, team="team1", map_name="inferno"))
+            response.append(await _send_veto(matchid=game.id, team="team2", map_name="anubis"))
+            response.append(await _send_pick(matchid=game.id, team="team1", map_name="train", map_number=1))
+            response.append(await _send_pick(matchid=game.id, team="team2", map_name="dust2", map_number=2))
+            response.append(await _send_veto(matchid=game.id, team="team1", map_name="mirage"))
+            response.append(await _send_veto(matchid=game.id, team="team2", map_name="ancient"))
+            response.append(await _send_pick(matchid=game.id, team="decider", map_name="nuke", map_number=3))
         elif games_to_wins == "bo5":
-            await _send_result(matchid=game.id, map_number=0, winner_team="team1")
-            await _send_result(matchid=game.id, map_number=1, winner_team="team2")
-            await _send_result(matchid=game.id, map_number=2, winner_team="team1")
-            await _send_result(matchid=game.id, map_number=3, winner_team="team1")
+            response.append(await _send_veto(matchid=game.id, team="team1", map_name="inferno"))
+            response.append(await _send_veto(matchid=game.id, team="team2", map_name="anubis"))
+            response.append(await _send_pick(matchid=game.id, team="team1", map_name="train", map_number=1))
+            response.append(await _send_pick(matchid=game.id, team="team2", map_name="dust2", map_number=2))
+            response.append(await _send_pick(matchid=game.id, team="team1", map_name="mirage", map_number=3))
+            response.append(await _send_pick(matchid=game.id, team="team2", map_name="ancient", map_number=4))
+            response.append(await _send_pick(matchid=game.id, team="decider", map_name="nuke", map_number=5))
+    return response
+    
+
+async def _auto_result(guild_id: int) -> list:
+    # Get all not finished games
+    response = []
+    games = bot.game_service.get_all_games_not_finished(guild_id=guild_id)
+    for game in games:
+        games_to_wins = await _get_game_to_wins(game)
+        if games_to_wins == "bo1":
+            response.append(await _send_result(matchid=game.id, map_number=0, winner_team="team2"))
+        elif games_to_wins == "bo3":
+            response.append(await _send_result(matchid=game.id, map_number=0, winner_team="team1"))
+            response.append(await _send_result(matchid=game.id, map_number=1, winner_team="team2"))
+            response.append(await _send_result(matchid=game.id, map_number=2, winner_team="team1"))
+        elif games_to_wins == "bo5":
+            response.append(await _send_result(matchid=game.id, map_number=0, winner_team="team1"))
+            response.append(await _send_result(matchid=game.id, map_number=1, winner_team="team2"))
+            response.append(await _send_result(matchid=game.id, map_number=2, winner_team="team1"))
+            response.append(await _send_result(matchid=game.id, map_number=3, winner_team="team1"))
+    return response
 
 
 async def _send_veto(matchid: int, team: str, map_name: str) -> str:
-    try:
-        data = {}
-        data['event'] = "map_vetoed"
-        data['matchid'] = matchid
-        data['team'] = team
-        data['map_name'] = map_name
+    data = {}
+    data['event'] = "map_vetoed"
+    data['matchid'] = matchid
+    data['team'] = team
+    data['map_name'] = map_name
 
-        url = f"http://{bot.WEBHOOK_BASE_URL}/match_logs/{matchid}"
+    url = f"{bot.WEBHOOK_BASE_URL}/match_logs/{matchid}"
+    data = json.dumps(data)
 
-        cmd = f"curl -X POST {url} -H \"Content-Type: application/json\" -d '{data}'"
-        response = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True)
-
-        return response.stdout
-    except Exception as e:
-        logging.error(f"Failed to _auto_veto: {str(e)}")
-        return {"error": f"Failed to _auto_veto: {str(e)}"}
-
-async def _send_pick(matchid: int, team: str, map_name: str) -> str:
+    cmd = f"curl -X POST {url} -H \"Content-Type: application/json\" -d '{data}'"
+    return cmd
+async def _send_pick(matchid: int, team: str, map_name: str, map_number: int) -> str:
     data = {}
     data['event'] = "map_picked"
     data['matchid'] = matchid
     data['team'] = team
     data['map_name'] = map_name
+    data['map_number'] = map_number
     
-    url = f"http://{bot.WEBHOOK_BASE_URL}/match_logs/{matchid}"
+    url = f"{bot.WEBHOOK_BASE_URL}/match_logs/{matchid}"
     data = json.dumps(data)
 
     cmd = f"curl -X POST {url} -H \"Content-Type: application/json\" -d '{data}'"
-    response = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True)
-
-    return response.stdout
+    return cmd
 
 async def _send_result(matchid: int, map_number: int, winner_team: str) -> str:
     data = {}
@@ -1526,15 +1532,22 @@ async def _send_result(matchid: int, map_number: int, winner_team: str) -> str:
     data['map_number'] = map_number
     winner = {}
     winner['team'] = winner_team
+
+    team1 = {}
+    team1['score'] = 13
+    data['team1'] = team1
+
+    team2 = {}
+    team2['score'] = 13
+    data['team2'] = team2
+
     data['winner'] = winner
 
-    url = f"http://{bot.WEBHOOK_BASE_URL}/match_logs/{matchid}"
+    url = f"{bot.WEBHOOK_BASE_URL}/match_logs/{matchid}"
     data = json.dumps(data)
 
     cmd = f"curl -X POST {url} -H \"Content-Type: application/json\" -d '{data}'"
-    response = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True)
-
-    return response.stdout
+    return cmd
 
 
 # API paths
@@ -1584,7 +1597,7 @@ async def match_logs(game_id: str, request: Request):
         elif event_value == "map_result": 
             await public_channel.send("map_result")
             winner = data.get('winner').get('team')
-            map_number = int(data.get('map_number')) + 1
+            map_number = data.get('map_number') + 1
             game_map = bot.game_map_service.get_by_game_id_game_number_game_map(game_id=game_id, game_number=map_number)
             await public_channel.send(map_number)
             map_name = game_map.map_name
@@ -1648,7 +1661,7 @@ async def match_logs(game_id: str, request: Request):
             map_name = data.get('map_name')
             pick = Pick(order_pick=all_order + 1, game_id=game_id, team_id=team_picker_id, map_name=map_name, guild_id=game.guild_id)
             bot.pick_service.create_pick(pick)
-            map_number = int(data.get('map_number'))
+            map_number = data.get('map_number')
             game_map = GameMap(game_number=map_number, map_name=pick.map_name, game_id=game.id, team_id_winner=-1, guild_id=game.guild_id)
             bot.game_map_service.create_game_map(game_map)             
             embed = await _game_embed(game)
