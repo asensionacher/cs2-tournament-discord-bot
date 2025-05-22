@@ -17,6 +17,7 @@ import asyncio
 from threading import Thread
 
 import requests
+import subprocess
 from rcon.source import rcon
 
 from services import DatabaseManager
@@ -541,96 +542,47 @@ async def start_live_game(ctx):
         
         file = discord.File(filename, filename=f"match_configs_game_{game.id}.json")
         await admin_game_channel.send("Match config:", file=file)
-
-        matchzy_loadmatch_url = f"\"{bot.WEBHOOK_BASE_URL}/match_configs/{game.id}.json\""
-        await admin_game_channel.send(f"Executing rcon `matchzy_loadmatch_url {matchzy_loadmatch_url}`")
-        
-        response = await rcon(
-            'matchzy_loadmatch_url', f"\"{bot.WEBHOOK_BASE_URL}/match_configs/{game.id}.json\"",
-            host=bot.SERVER_IP, port=int(bot.SERVER_PORT), passwd=bot.RCON_PASSWORD
-        )
-        await admin_game_channel.send(response)
-        
-        matchzy_remote_log_url = f"\"{bot.WEBHOOK_BASE_URL}/match_logs/{game.id}\""
-        await admin_game_channel.send(f"Executing rcon `matchzy_remote_log_url {matchzy_remote_log_url}`")
-        response = await rcon(
-            'matchzy_remote_log_url', matchzy_remote_log_url,
-            host=bot.SERVER_IP, port=int(bot.SERVER_PORT), passwd=bot.RCON_PASSWORD
-        )
-        if response is not None and response != "":
-            await admin_game_channel.send(response)
-        
-        
-        matchzy_demo_upload_url = f"\"{bot.WEBHOOK_BASE_URL}/match_demos/{game.id}\""
-        await admin_game_channel.send(f"Executing rcon `matchzy_demo_upload_url {matchzy_demo_upload_url}`")
-        response = await rcon(
-            'matchzy_demo_upload_url', matchzy_demo_upload_url,
-            host=bot.SERVER_IP, port=int(bot.SERVER_PORT), passwd=bot.RCON_PASSWORD
-        )
-        if response is not None and response != "":
-            await admin_game_channel.send(response)
+        rcons = {
+            "matchzy_remote_log_url": {'matchzy_loadmatch_url', f"\"{bot.WEBHOOK_BASE_URL}/match_configs/{game.id}.json\""},
+            "matchzy_remote_log_url": {'matchzy_remote_log_url', f"\"{bot.WEBHOOK_BASE_URL}/match_logs/{game.id}\""},
+            "matchzy_demo_upload_url": {'matchzy_demo_upload_url', f"\"{bot.WEBHOOK_BASE_URL}/match_demos/{game.id}\""},
+            "matchzy_minimum_ready_required": {'matchzy_minimum_ready_required', '1'},
+            "matchzy_chat_prefix": {'matchzy_chat_prefix', "[{Green}" + bot.TOURNAMENT_NAME + "{Default}]"},
+            "matchzy_admin_chat_prefix": {'matchzy_admin_chat_prefix', "[{Red}Admin{Default}]"},
+            "matchzy_hostname_format": {'matchzy_hostname_format', "\"\""},
+            "matchzy_knife_enabled_default": {'matchzy_knife_enabled_default', "true"},
+            "matchzy_kick_when_no_match_loaded": {'matchzy_kick_when_no_match_loaded', "true"},
+            "matchzy_enable_damage_report": {'matchzy_enable_damage_report', 'false'}
+        }
+        for key, command in rcons.items():
+            await admin_game_channel.send(f"Executing rcon command `{command}`")
+            response = await _execute_rcon(command)
+            if response is not None and response != "":
+                await admin_game_channel.send(response)
                 
-        await admin_game_channel.send(f"Executing rcon `matchzy_minimum_ready_required 1`")
-        response = await rcon(
-            'matchzy_minimum_ready_required','1',
-            host=bot.SERVER_IP, port=int(bot.SERVER_PORT), passwd=bot.RCON_PASSWORD
-        )
-        if response is not None and response != "":
-            await admin_game_channel.send(response)
-
-        matchzy_chat_prefix = "[{Green}" + bot.TOURNAMENT_NAME + "{Default}]"
-        await admin_game_channel.send(f"Executing rcon `matchzy_chat_prefix {matchzy_chat_prefix}`")
-        response = await rcon(
-            'matchzy_chat_prefix', matchzy_chat_prefix,
-            host=bot.SERVER_IP, port=int(bot.SERVER_PORT), passwd=bot.RCON_PASSWORD
-        )
-        if response is not None and response != "":
-            await admin_game_channel.send(response)
-
-        matchzy_admin_chat_prefix = "[{Red}Admin{Default}]"
-        await admin_game_channel.send("Executing rcon `matchzy_admin_chat_prefix {matchzy_admin_chat_prefix}`")
-        response = await rcon(
-            'matchzy_admin_chat_prefix', matchzy_admin_chat_prefix,
-            host=bot.SERVER_IP, port=int(bot.SERVER_PORT), passwd=bot.RCON_PASSWORD
-        )
-        if response is not None and response != "":
-            await admin_game_channel.send(response)
-
-        await admin_game_channel.send("Executing rcon `matchzy_hostname_format \"\"`")
-        response = await rcon(
-            'matchzy_hostname_format', "\"\"",
-            host=bot.SERVER_IP, port=int(bot.SERVER_PORT), passwd=bot.RCON_PASSWORD
-        )
-        if response is not None and response != "":
-            await admin_game_channel.send(response)
-
-        await admin_game_channel.send("Executing rcon `matchzy_knife_enabled_default \"\"`")
-        response = await rcon(
-            'matchzy_knife_enabled_default', "\"true\"",
-            host=bot.SERVER_IP, port=int(bot.SERVER_PORT), passwd=bot.RCON_PASSWORD
-        )
-        if response is not None and response != "":
-            await admin_game_channel.send(response)
-
-        await admin_game_channel.send("Executing rcon `matchzy_kick_when_no_match_loaded \"\"`")
-        response = await rcon(
-            'matchzy_kick_when_no_match_loaded', "\"true\"",
-            host=bot.SERVER_IP, port=int(bot.SERVER_PORT), passwd=bot.RCON_PASSWORD
-        )
-        if response is not None and response != "":
-            await admin_game_channel.send(response)
-
-        await admin_game_channel.send("Executing rcon `matchzy_enable_damage_report \"\"`")
-        response = await rcon(
-            'matchzy_enable_damage_report', "\"false\"",
-            host=bot.SERVER_IP, port=int(bot.SERVER_PORT), passwd=bot.RCON_PASSWORD
-        )
-        if response is not None and response != "":
-            await admin_game_channel.send(response)
-
     except Exception as e:
         logging.error(f"Error saving match config: {e}")
         await ctx.send(f"❌ Error saving match config. Start manually the game on the server: {e}")
+
+@bot.command()
+@discord.ext.commands.has_role("admin")
+async def autovetoautoresults(ctx):
+    """
+    autovetoautoresults 
+    Format: !autovetoautoresults
+    """
+    guild = ctx.guild
+
+    try:
+        await ctx.send("AUTOVETO")
+        await _auto_veto(guild_id=guild.id)
+        await ctx.send("AUTORESULT")
+        await _auto_result(guild_id=guild.id)
+                
+    except Exception as e:
+        logging.error(f"Error autovetoautoresult: {e}")
+        await ctx.send(f"❌ Error autovetoautoresult: {e}")
+
 
 async def _get_matchzy_values(game: Game) -> str:
     match_id = str(game.id)
@@ -1472,11 +1424,120 @@ async def _set_result(game: Game, team_number: int, map_name: str):
     
     await _game_summary(game=game)
 
-# API paths
-@app.get('/match_configs')
-async def match_configs():
-    return {"message": "Hello World", "status": 200}
+async def _execute_rcon(*command: str) -> str :    
+    response = await rcon(
+        command,
+        host=bot.SERVER_IP, port=int(bot.SERVER_PORT), passwd=bot.RCON_PASSWORD
+    )
+    response = command
+    return response
 
+async def _auto_veto(guild_id: int):
+    # Get all not finished games
+    try:
+        games = bot.game_service.get_all_games_not_finished(guild_id=guild_id)
+        for game in games:
+            games_to_wins = await _get_game_to_wins(game)
+            if games_to_wins == "bo1":
+                response = await _send_veto(matchid=game.id, team="team1", map_name="inferno")
+                logging.error(response)
+                await _send_veto(matchid=game.id, team="team2", map_name="anubis")
+                await _send_veto(matchid=game.id, team="team1", map_name="train")
+                await _send_veto(matchid=game.id, team="team2", map_name="dust2")
+                await _send_veto(matchid=game.id, team="team1", map_name="mirage")
+                await _send_veto(matchid=game.id, team="team2", map_name="ancient")
+                await _send_pick(matchid=game.id, team="null", map_name="nuke")
+            elif games_to_wins == "bo3":
+                await _send_veto(matchid=game.id, team="team1", map_name="inferno")
+                await _send_veto(matchid=game.id, team="team2", map_name="anubis")
+                await _send_pick(matchid=game.id, team="team1", map_name="train")
+                await _send_pick(matchid=game.id, team="team2", map_name="dust2")
+                await _send_veto(matchid=game.id, team="team1", map_name="mirage")
+                await _send_veto(matchid=game.id, team="team2", map_name="ancient")
+                await _send_pick(matchid=game.id, team="null", map_name="nuke")
+            elif games_to_wins == "bo5":
+                await _send_veto(matchid=game.id, team="team1", map_name="inferno")
+                await _send_veto(matchid=game.id, team="team2", map_name="anubis")
+                await _send_pick(matchid=game.id, team="team1", map_name="train")
+                await _send_pick(matchid=game.id, team="team2", map_name="dust2")
+                await _send_pick(matchid=game.id, team="team1", map_name="mirage")
+                await _send_pick(matchid=game.id, team="team2", map_name="ancient")
+                await _send_pick(matchid=game.id, team="null", map_name="nuke")
+    except Exception as e:
+        logging.error(f"Failed to _auto_veto: {str(e)}")
+        return {"error": f"Failed to _auto_veto: {str(e)}"}
+    
+
+async def _auto_result(guild_id: int):
+    # Get all not finished games
+    games = bot.game_service.get_all_games_not_finished(guild_id=guild_id)
+    for game in games:
+        games_to_wins = await _get_game_to_wins(game)
+        if games_to_wins == "bo1":
+            await _send_result(matchid=game.id, map_number=0, winner_team="team2")
+        elif games_to_wins == "bo3":
+            await _send_result(matchid=game.id, map_number=0, winner_team="team1")
+            await _send_result(matchid=game.id, map_number=1, winner_team="team2")
+            await _send_result(matchid=game.id, map_number=2, winner_team="team1")
+        elif games_to_wins == "bo5":
+            await _send_result(matchid=game.id, map_number=0, winner_team="team1")
+            await _send_result(matchid=game.id, map_number=1, winner_team="team2")
+            await _send_result(matchid=game.id, map_number=2, winner_team="team1")
+            await _send_result(matchid=game.id, map_number=3, winner_team="team1")
+
+
+async def _send_veto(matchid: int, team: str, map_name: str) -> str:
+    try:
+        data = {}
+        data['event'] = "map_vetoed"
+        data['matchid'] = matchid
+        data['team'] = team
+        data['map_name'] = map_name
+
+        url = f"http://{bot.WEBHOOK_BASE_URL}/match_logs/{matchid}"
+
+        cmd = f"curl -X POST {url} -H \"Content-Type: application/json\" -d '{data}'"
+        response = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True)
+
+        return response.stdout
+    except Exception as e:
+        logging.error(f"Failed to _auto_veto: {str(e)}")
+        return {"error": f"Failed to _auto_veto: {str(e)}"}
+
+async def _send_pick(matchid: int, team: str, map_name: str) -> str:
+    data = {}
+    data['event'] = "map_picked"
+    data['matchid'] = matchid
+    data['team'] = team
+    data['map_name'] = map_name
+    
+    url = f"http://{bot.WEBHOOK_BASE_URL}/match_logs/{matchid}"
+    data = json.dumps(data)
+
+    cmd = f"curl -X POST {url} -H \"Content-Type: application/json\" -d '{data}'"
+    response = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True)
+
+    return response.stdout
+
+async def _send_result(matchid: int, map_number: int, winner_team: str) -> str:
+    data = {}
+    data['event'] = "map_result"
+    data['matchid'] = matchid
+    data['map_number'] = map_number
+    winner = {}
+    winner['team'] = winner_team
+    data['winner'] = winner
+
+    url = f"http://{bot.WEBHOOK_BASE_URL}/match_logs/{matchid}"
+    data = json.dumps(data)
+
+    cmd = f"curl -X POST {url} -H \"Content-Type: application/json\" -d '{data}'"
+    response = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True)
+
+    return response.stdout
+
+
+# API paths
 @app.get('/match_configs/{file_name}')
 async def match_configs_file(file_name: str):
     # Read the corresponding JSON file
@@ -1508,6 +1569,9 @@ async def match_logs(game_id: str, request: Request):
         data = await request.json()
         with open(filepath, "w") as f:
             json.dump(data, f, indent=4)
+        if data is None:
+            await public_channel.send("NONO")
+            return
         file = discord.File(filepath, filename=random_filename)
         
         event_value = data.get('event')
@@ -1516,8 +1580,7 @@ async def match_logs(game_id: str, request: Request):
         
         if event_value == "series_start":  
             #await asyncio.wait_for(public_channel.send("Starting game"), timeout=5)
-            await public_channel.send("Starting game")
-            
+            await public_channel.send("Starting game")          
         elif event_value == "map_result": 
             await public_channel.send("map_result")
             winner = data.get('winner').get('team')
@@ -1595,7 +1658,8 @@ async def match_logs(game_id: str, request: Request):
                     await msg.edit(embed=embed)
                 except Exception as e:
                     await public_channel.send(f"⚠️ Pick added but failed to update display: {e}")
-
+        else:
+            await public_channel.send("NONONO")
         await _tournament_summary(guild_id=guild_id)
         return {"message": "Log saved successfully", "filename": random_filename}
     except Exception as e:
