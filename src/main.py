@@ -1,5 +1,3 @@
-# TODO: Replace result instead of map_name get the first that status is not finished
-
 import json
 import os
 import logging
@@ -74,55 +72,48 @@ async def on_ready():
 @discord.ext.commands.has_role("admin")
 async def help(ctx):
     """Show help information based on user role"""
-    
-    help_msg = ("🔧 **Initial Setup**\n"
-                "• Send `!start` to create all necessary roles, categories and channels\n")
-    await ctx.send(help_msg)
 
     help_msg = (
+        "🔧 **Initial Setup**\n"
+        "• Send `!start` to create all necessary roles, categories and channels\n\n"
         "🎮 **CS2 Tournament Bot Help**\n\n"
         "⚠️ Please use the #admin channel for all admin commands!\n\n"
-        
-        "**Initial Setup:**\n"
         "• `!start` - Initialize server setup (roles, categories, channels)\n\n"
-
-        "**Game Settings:**\n"
         "• `!get_settings` - Get all settings for the server\n\n"
-        
-        "**Team Management:**\n"
         "• `!create_team <team_name>` - Create a new team\n"
         "• `!add_player <team_name> <nickname> <steamid> <role>` - Add player to team\n"
         "  Roles can be: captain/coach/player\n"
         "• `!delete_team <team_name>` - Delete team\n"
         "• `!delete_player <nickname>` - Delete player\n\n"
-        
-        "**Tournament Flow:**\n"
         "• `!all_teams_created` - Lock teams and start tournament\n"
-        "• `!finish_round` - Complete current round and start next\n"
-        "• `!tournamentsummary` - Show tournament progress\n\n"
-        
-        "**Game Management:**\n"
-        "• `!veto <map_name>` - Veto a map (execute in game channel)\n"
-        "• `!pick <map_name>` - Pick a map (execute in game channel)\n"
-        "• `!result <map_name> <team_number>` - Set map winner (1 or 2)\n"
-        "• `!summary` - Show game status\n"
-        "• `!start_map` - Start the current map for the current game. IF IT IS EXECUTED TWICE BEFORE THE GAME HAS BEEN FINISHED THIS WILL RESTART THE MATCH.\n\n"
-
-        "**Admin Testing:**\n"
+        "• `!finish_round` - Complete current round and start next\n\n"
+        "• `!start_live_game` - Sends all the information to the CS2/matchzy server.\n\n"
+        "**Admin Testing:** - ONLY USE FOR TESTING.\n"
         "• `!mock_teams` - Create mock teams until 16 teams\n"
-        "• `!autoveto` - Auto execute vetos for all games\n" 
-        "• `!autoresults` - Auto set results for all games\n"
         "• `!autovetoautoresults` - Auto veto and set results\n"
         "• `!delete_games <game_type>` - Delete all games from a round\n"
         "• `!im_all_teams_captain` - Make my user captain of all teams\n"
     )
+    await ctx.send(help_msg)
+    admin_channel = bot.channel_service.get_channel_by_name(channel_name="admin", guild_id=ctx.guild.id)
+    admin_channel_text = "#admin"
+    if admin_channel is not None:
+        admin_channel_text = f"<#{admin_channel.channel_id}>"
     
-    try:
-        await ctx.send(help_msg)
-        logging.info(f"Help message sent to {ctx.author.name}")
-    except discord.errors.HTTPException as e:
-        logging.error(f"Failed to send help message: {e}")
-        await ctx.send("❌ Error sending help message. Please check logs.")
+    help_msg = (
+        "**ℹ️How to use the bot:**\n"
+        "1. Execute the bot with a `.env` file with all environment variables set. If not, the bot will not report automatically the results and vetoes.\n"
+        "2. Execute `!start` for all the categories and channels being created. Optionally remove initial channels in the server.\n"
+        f"3. Go to the {admin_channel_text} channel and create teams and players.\n"
+        "4. Whith all teams created, execute `!all_teams_created`. Be sure that before executing this, all settings have been setted up.\n"
+        "5. Swiss stage round 1 games have been created. Go to the first admin channel game you want to start.\n"
+        "   • If you have setted the all the environment variables and you want the server to be autosetted, execute `!start_live_game`\n"
+        "   • If not, you have to send events manually to the bot for veto, picking and results (NOT RECOMMENDED).\n"
+        f"6. Once all games have been finished, execute `!finish_round` in the {admin_channel_text} channel."
+    )
+    await ctx.send(help_msg)
+
+    logging.info(f"Help message sent to {ctx.author.name}")
 
 @bot.command()
 async def start(ctx):
@@ -309,10 +300,10 @@ async def all_teams_created(ctx):
     guild = ctx.guild
     all_teams_created_setting = bot.setting_service.get_setting_by_name(
         setting_key="all_teams_created", guild_id=guild.id)
-    # if all_teams_created_setting is not None:
-    #     if all_teams_created_setting.value == "true":
-    #         await ctx.send("Tournament already started!")
-    #         return
+    if all_teams_created_setting is not None:
+        if all_teams_created_setting.value == "true":
+            await ctx.send("Tournament already started!")
+            return
     if not ctx.channel.name == "admin":
         await ctx.send("Must be executed from admin channel")
         return
@@ -355,7 +346,7 @@ async def mock_teams(ctx):
         teams = bot.team_service.get_all_teams(guild_id=guild.id)
         for team in teams:
             team_name = team.name
-            await ctx.send(f"Creating {team_name} players:")
+            logging.info(f"Creating {team_name} players:")
             players = [
                 (f"{team_name}captain", "captain"),
                 (f"{team_name}player1", "player"),
@@ -373,25 +364,6 @@ async def mock_teams(ctx):
 
 @bot.command()
 @discord.ext.commands.has_role("admin")
-async def summary(ctx):
-    """
-    Creates summary of the game of the game admin channel. This is only intended to be used if
-    any problem happened when updating game summary.
-    Format: !summary
-    """
-    try:
-        channel_id = ctx.channel.id
-        game = bot.game_service.get_game_by_admin_game_channel_id(admin_game_channel_id=channel_id)
-        if game is None:
-            await ctx.send("This must be sent from a admin game channel.")
-            return
-        await _game_summary(game)
-    except Exception as e:
-        logging.error(f"Error during summary command: {e}")
-        await ctx.send(f"❌ Error during summary command: {e}")
-    
-@bot.command()
-@discord.ext.commands.has_role("admin")
 async def finish_round(ctx):
     """
     Checks if all matches from current round are finished and if true creates the new random games for the next round.
@@ -402,45 +374,6 @@ async def finish_round(ctx):
         return
     else:
         await _set_new_round(ctx)
-
-@bot.command()
-@discord.ext.commands.has_role("admin")
-async def tournamentsummary(ctx):
-    """
-    Creates summary of the whole tournament. This is only intended to be used if
-    any problem happened when updating tournament summary.
-    Format: !tournamentsummary
-    """
-    try:
-        await _tournament_summary(guild_id=ctx.guild.id)
-    except Exception as e:
-        logging.error(f"Error during tournamentsummary command: {e}")
-        await ctx.send(f"❌ Error during tournamentsummary command: {e}")    
-
-@bot.command()
-@discord.ext.commands.has_role("admin")
-async def get_settings(ctx):
-    """
-    Get all settings for the server.
-    Format: !get_settings
-    """
-    try:
-        if not ctx.channel.name == "admin":
-            await ctx.send("Must be executed from admin channel")
-            return
-        else:
-            guild = ctx.guild
-            settings = bot.setting_service.get_all_settings(guild_id=guild.id)
-            if not settings:
-                await ctx.send("No settings found.")
-                return
-            settings_msg = "Settings:\n"
-            for setting in settings:
-                settings_msg += f"{setting.key}: {setting.value}\n"
-            await ctx.send(settings_msg)
-    except Exception as e:
-        logging.error(f"Error during get_settings command: {e}")
-        await ctx.send(f"❌ Error during get_settings command: {e}")
 
 @bot.command()
 @discord.ext.commands.has_role("admin")
@@ -555,10 +488,10 @@ async def start_live_game(ctx):
             "matchzy_enable_damage_report": {'matchzy_enable_damage_report', 'false'}
         }
         for key, command in rcons.items():
-            await admin_game_channel.send(f"Executing rcon command `{command}`")
+            logging.info(f"Executing rcon command `{command}`")
             response = await _execute_rcon(command)
             if response is not None and response != "":
-                await admin_game_channel.send(response)
+                logging.info(response)
                 
     except Exception as e:
         logging.error(f"Error saving match config: {e}")
@@ -596,7 +529,6 @@ async def autovetoautoresults(ctx):
         logging.error(f"Error during response_to_file command: {e}")
         await ctx.send(f"❌ Error generating response file: {e}")
         
-    
 
 async def _get_matchzy_values(game: Game) -> str:
     match_id = str(game.id)
@@ -1438,13 +1370,17 @@ async def _set_result(game: Game, team_number: int, map_name: str):
     
     await _game_summary(game=game)
 
-async def _execute_rcon(*command: str) -> str :    
-    response = await rcon(
-        command,
-        host=bot.SERVER_IP, port=int(bot.SERVER_PORT), passwd=bot.RCON_PASSWORD
-    )
-    response = command
-    return response
+async def _execute_rcon(*command: str) -> str : 
+    try:    
+        response = await rcon(
+            command,
+            host=bot.SERVER_IP, port=int(bot.SERVER_PORT), passwd=bot.RCON_PASSWORD
+        )
+        response = command
+        return response
+    except Exception as e:
+        logging.error(f"Error on execute_rcon: {e}")
+        return f"❌ Error on execute_rcon. Start manually the game on the server: {e}"
 
 async def _auto_veto(guild_id: int) -> list:
     # Get all not finished games
@@ -1478,7 +1414,6 @@ async def _auto_veto(guild_id: int) -> list:
             response.append(await _send_pick(matchid=game.id, team="decider", map_name="nuke", map_number=5))
     return response
     
-
 async def _auto_result(guild_id: int) -> list:
     # Get all not finished games
     response = []
@@ -1498,7 +1433,6 @@ async def _auto_result(guild_id: int) -> list:
             response.append(await _send_result(matchid=game.id, map_number=3, winner_team="team1"))
     return response
 
-
 async def _send_veto(matchid: int, team: str, map_name: str) -> str:
     data = {}
     data['event'] = "map_vetoed"
@@ -1511,6 +1445,7 @@ async def _send_veto(matchid: int, team: str, map_name: str) -> str:
 
     cmd = f"curl -X POST {url} -H \"Content-Type: application/json\" -d '{data}'"
     return cmd
+
 async def _send_pick(matchid: int, team: str, map_name: str, map_number: int) -> str:
     data = {}
     data['event'] = "map_picked"
@@ -1549,6 +1484,17 @@ async def _send_result(matchid: int, map_number: int, winner_team: str) -> str:
     cmd = f"curl -X POST {url} -H \"Content-Type: application/json\" -d '{data}'"
     return cmd
 
+async def _create_image_from_stats(jsons: array):
+    # Deserialize json
+    teams = []
+    team1 = {}
+    
+    for json in jsons:
+        data = json.loads(json)
+        if 'team1' in data:
+            team1_data = json['team1']
+        else:
+            return
 
 # API paths
 @app.get('/match_configs/{file_name}')
@@ -1595,11 +1541,9 @@ async def match_logs(game_id: str, request: Request):
             #await asyncio.wait_for(public_channel.send("Starting game"), timeout=5)
             await public_channel.send("Starting game")          
         elif event_value == "map_result": 
-            await public_channel.send("map_result")
             winner = data.get('winner').get('team')
             map_number = data.get('map_number') + 1
             game_map = bot.game_map_service.get_by_game_id_game_number_game_map(game_id=game_id, game_number=map_number)
-            await public_channel.send(map_number)
             map_name = game_map.map_name
             team_winner = None
             team_looser = None
@@ -1612,7 +1556,6 @@ async def match_logs(game_id: str, request: Request):
                 team_winner = team_two
                 team_looser = team_one
                 team_number = 2
-            await public_channel.send(f"map_name: {map_name}")
             team1_score = data.get('team1').get('score')
             team2_score = data.get('team2').get('score')
             message = f"""

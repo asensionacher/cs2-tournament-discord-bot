@@ -21,9 +21,8 @@ This bot is in a very early stage, so keep in mind that bugs and missing feature
 
 - [ ] Adding a `league-system` instead of `swiss-system` before elimination stage. 
 - [ ] Adding more teams, now only 16 teams can be added.
-- [ ] Add RCON commands for automatically starting matches using [MatchZy match_setup](https://shobhit-pathak.github.io/MatchZy/match_setup/).
-- [ ] Receive [MatchZy Events & Forwards](https://shobhit-pathak.github.io/MatchZy/events_and_forwards/) for automatically set map and games winners.
-- [ ] Share stats of each map.
+- [ ] Make a channel with top scorers.
+- [ ] Create a table per game with game_map and game stats.
 
 ## How to use
 
