@@ -1475,27 +1475,15 @@ async def _send_pick(matchid: int, team: str, map_name: str, map_number: int) ->
     return cmd
 
 async def _send_result(matchid: int, map_number: int, winner_team: str) -> str:
-    data = {}
-    data['event'] = "map_result"
+    json_base = '{"event":"map_result","matchid":14272,"map_number":0,"team1":{"id":"2843","name":"Iberian Soul","series_score":0,"score":14,"score_ct":10,"score_t":14,"players":[{"steamid":"76561198279375306","name":"s1mple1","stats":{"kills":34,"deaths":8,"assists":5,"flash_assists":3,"team_kills":0,"suicides":0,"damage":2948,"utility_damage":173,"enemies_flashed":6,"friendlies_flashed":2,"knife_kills":1,"headshot_kills":19,"rounds_played":27,"bomb_defuses":4,"bomb_plants":3,"1k":3,"2k":2,"3k":3,"4k":0,"5k":1,"1v1":1,"1v2":3,"1v3":2,"1v4":0,"1v5":1,"first_kills_t":6,"first_kills_ct":5,"first_deaths_t":1,"first_deaths_ct":1,"trade_kills":3,"kast":23,"score":45,"mvp":4}},{"steamid":"76561198279375306","name":"s1mple2","stats":{"kills":12,"deaths":8,"assists":5,"flash_assists":3,"team_kills":0,"suicides":0,"damage":1348,"utility_damage":173,"enemies_flashed":6,"friendlies_flashed":2,"knife_kills":1,"headshot_kills":19,"rounds_played":27,"bomb_defuses":4,"bomb_plants":3,"1k":3,"2k":2,"3k":3,"4k":0,"5k":1,"1v1":1,"1v2":3,"1v3":2,"1v4":0,"1v5":1,"first_kills_t":6,"first_kills_ct":5,"first_deaths_t":1,"first_deaths_ct":1,"trade_kills":3,"kast":33,"score":45,"mvp":4}},{"steamid":"76561198279375306","name":"s1mple3","stats":{"kills":12,"deaths":8,"assists":5,"flash_assists":3,"team_kills":0,"suicides":0,"damage":1348,"utility_damage":173,"enemies_flashed":6,"friendlies_flashed":2,"knife_kills":1,"headshot_kills":19,"rounds_played":27,"bomb_defuses":4,"bomb_plants":3,"1k":3,"2k":2,"3k":3,"4k":0,"5k":1,"1v1":1,"1v2":3,"1v3":2,"1v4":0,"1v5":1,"first_kills_t":6,"first_kills_ct":5,"first_deaths_t":1,"first_deaths_ct":1,"trade_kills":3,"kast":33,"score":45,"mvp":4}},{"steamid":"76561198279375306","name":"s1mple4","stats":{"kills":12,"deaths":8,"assists":5,"flash_assists":3,"team_kills":0,"suicides":0,"damage":1348,"utility_damage":173,"enemies_flashed":6,"friendlies_flashed":2,"knife_kills":1,"headshot_kills":19,"rounds_played":27,"bomb_defuses":4,"bomb_plants":3,"1k":3,"2k":2,"3k":3,"4k":0,"5k":1,"1v1":1,"1v2":3,"1v3":2,"1v4":0,"1v5":1,"first_kills_t":6,"first_kills_ct":5,"first_deaths_t":1,"first_deaths_ct":1,"trade_kills":3,"kast":33,"score":45,"mvp":4}},{"steamid":"76561198279375306","name":"s1mple5","stats":{"kills":12,"deaths":8,"assists":5,"flash_assists":3,"team_kills":0,"suicides":0,"damage":1348,"utility_damage":173,"enemies_flashed":6,"friendlies_flashed":2,"knife_kills":1,"headshot_kills":19,"rounds_played":27,"bomb_defuses":4,"bomb_plants":3,"1k":3,"2k":2,"3k":3,"4k":0,"5k":1,"1v1":1,"1v2":3,"1v3":2,"1v4":0,"1v5":1,"first_kills_t":6,"first_kills_ct":5,"first_deaths_t":1,"first_deaths_ct":1,"trade_kills":3,"kast":33,"score":45,"mvp":4}}],"side":"ct","starting_side":"ct"},"team2":{"id":"2843","name":"Natus Vincere","series_score":0,"score":14,"score_ct":10,"score_t":14,"players":[{"steamid":"76561198279375306","name":"s1mple1","stats":{"kills":34,"deaths":8,"assists":5,"flash_assists":3,"team_kills":0,"suicides":0,"damage":2948,"utility_damage":173,"enemies_flashed":6,"friendlies_flashed":2,"knife_kills":1,"headshot_kills":19,"rounds_played":27,"bomb_defuses":4,"bomb_plants":3,"1k":3,"2k":2,"3k":3,"4k":0,"5k":1,"1v1":1,"1v2":3,"1v3":2,"1v4":0,"1v5":1,"first_kills_t":6,"first_kills_ct":5,"first_deaths_t":1,"first_deaths_ct":1,"trade_kills":3,"kast":23,"score":45,"mvp":4}},{"steamid":"76561198279375306","name":"s1mple2","stats":{"kills":12,"deaths":8,"assists":5,"flash_assists":3,"team_kills":0,"suicides":0,"damage":1348,"utility_damage":173,"enemies_flashed":6,"friendlies_flashed":2,"knife_kills":1,"headshot_kills":19,"rounds_played":27,"bomb_defuses":4,"bomb_plants":3,"1k":3,"2k":2,"3k":3,"4k":0,"5k":1,"1v1":1,"1v2":3,"1v3":2,"1v4":0,"1v5":1,"first_kills_t":6,"first_kills_ct":5,"first_deaths_t":1,"first_deaths_ct":1,"trade_kills":3,"kast":33,"score":45,"mvp":4}},{"steamid":"76561198279375306","name":"s1mple3","stats":{"kills":12,"deaths":8,"assists":5,"flash_assists":3,"team_kills":0,"suicides":0,"damage":1348,"utility_damage":173,"enemies_flashed":6,"friendlies_flashed":2,"knife_kills":1,"headshot_kills":19,"rounds_played":27,"bomb_defuses":4,"bomb_plants":3,"1k":3,"2k":2,"3k":3,"4k":0,"5k":1,"1v1":1,"1v2":3,"1v3":2,"1v4":0,"1v5":1,"first_kills_t":6,"first_kills_ct":5,"first_deaths_t":1,"first_deaths_ct":1,"trade_kills":3,"kast":33,"score":45,"mvp":4}},{"steamid":"76561198279375306","name":"s1mple4","stats":{"kills":12,"deaths":8,"assists":5,"flash_assists":3,"team_kills":0,"suicides":0,"damage":1348,"utility_damage":173,"enemies_flashed":6,"friendlies_flashed":2,"knife_kills":1,"headshot_kills":19,"rounds_played":27,"bomb_defuses":4,"bomb_plants":3,"1k":3,"2k":2,"3k":3,"4k":0,"5k":1,"1v1":1,"1v2":3,"1v3":2,"1v4":0,"1v5":1,"first_kills_t":6,"first_kills_ct":5,"first_deaths_t":1,"first_deaths_ct":1,"trade_kills":3,"kast":33,"score":45,"mvp":4}},{"steamid":"76561198279375306","name":"s1mple5","stats":{"kills":12,"deaths":8,"assists":5,"flash_assists":3,"team_kills":0,"suicides":0,"damage":1348,"utility_damage":173,"enemies_flashed":6,"friendlies_flashed":2,"knife_kills":1,"headshot_kills":19,"rounds_played":27,"bomb_defuses":4,"bomb_plants":3,"1k":3,"2k":2,"3k":3,"4k":0,"5k":1,"1v1":1,"1v2":3,"1v3":2,"1v4":0,"1v5":1,"first_kills_t":6,"first_kills_ct":5,"first_deaths_t":1,"first_deaths_ct":1,"trade_kills":3,"kast":33,"score":45,"mvp":4}}],"side":"ct","starting_side":"ct"},"winner":{"side":"ct","team":"team1"}}'
+    data = json.loads(json_base)
     data['matchid'] = matchid
     data['map_number'] = map_number
-    winner = {}
-    winner['team'] = winner_team
-
-    team1 = {}
-    team1['score'] = 13
-    data['team1'] = team1
-
-    team2 = {}
-    team2['score'] = 13
-    data['team2'] = team2
-
-    data['winner'] = winner
-
+    data['winner']['team'] = winner_team
+    json = json.dumps(data)
     url = f"{bot.WEBHOOK_BASE_URL}/match_logs/{matchid}"
-    data = json.dumps(data)
 
-    cmd = f"curl -X POST {url} -H \"Content-Type: application/json\" -d '{data}'"
+    cmd = f"curl -X POST {url} -H \"Content-Type: application/json\" -d '{json}'"
     return cmd
 
 async def _get_teams_stats_from_json(datas: list) -> any: 
