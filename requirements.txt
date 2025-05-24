@@ -4,3 +4,4 @@ uvicorn[standard]
 pysqlite3
 python-dotenv
 rcon
+Pillow

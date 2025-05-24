@@ -1,4 +1,5 @@
 import json
+from PIL import Image, ImageDraw, ImageFont
 import os
 import logging
 from logging.handlers import RotatingFileHandler
@@ -203,6 +204,19 @@ async def start(ctx):
     except Exception as e:
         await ctx.send(f"Error during start command: {str(e)}")
         logging.error(f"Error during start command: {e}", exc_info=True)
+
+@bot.command()
+@discord.ext.commands.has_role("admin")
+async def executercon(ctx, *command: str):
+    """
+    Create a new team
+    Format: !create_team <team_name>
+    - team_name: Single word (e.g., "Iberian_Soul)
+    If it is a word separated by spaces, a '_' will be replaced
+    """
+    # Join multiple words and replace spaces with underscore only if multiple words
+    response = await _execute_rcon(command)
+    await ctx.send(response)
 
 @bot.command()
 @discord.ext.commands.has_role("admin")
@@ -1372,11 +1386,11 @@ async def _set_result(game: Game, team_number: int, map_name: str):
 
 async def _execute_rcon(*command: str) -> str : 
     try:    
+        command = ' '.join(command[0])
         response = await rcon(
             command,
             host=bot.SERVER_IP, port=int(bot.SERVER_PORT), passwd=bot.RCON_PASSWORD
         )
-        response = command
         return response
     except Exception as e:
         logging.error(f"Error on execute_rcon: {e}")
@@ -1484,17 +1498,109 @@ async def _send_result(matchid: int, map_number: int, winner_team: str) -> str:
     cmd = f"curl -X POST {url} -H \"Content-Type: application/json\" -d '{data}'"
     return cmd
 
-async def _create_image_from_stats(jsons: array):
-    # Deserialize json
+async def _get_teams_stats_from_json(datas: list) -> any: 
+    teams_data = {}
+    for data in datas:
+        for team_key in ['team1', 'team2']:
+            team = data[team_key]
+            if not team:
+                continue
+            team_name = team['name']
+            if not team_name:
+                continue
+            if team_name not in teams_data:
+                teams_data[team_name] = {}
+
+            for player in team['players']:
+                name = player['name']
+                stats = player['stats']
+                if not name:
+                    continue
+                if name not in teams_data[team_name]:
+                    teams_data[team_name][name] = {
+                        "kills": 0,
+                        "deaths": 0,
+                        "damage": 0,
+                        "kast": 0,
+                        "matches": 0
+                    }
+                teams_data[team_name][name]["kills"] += stats.get("kills", 0)
+                teams_data[team_name][name]["deaths"] += stats.get("deaths", 0)
+                teams_data[team_name][name]["damage"] += stats.get("damage", 0)
+                teams_data[team_name][name]["kast"] += stats.get("kast", 0)
+                teams_data[team_name][name]["matches"] += 1
+
+    # Construcción del resultado
     teams = []
-    team1 = {}
-    
-    for json in jsons:
-        data = json.loads(json)
-        if 'team1' in data:
-            team1_data = json['team1']
-        else:
-            return
+    for team_name, players in teams_data.items():
+        team_entry = {"name": team_name, "players": []}
+        for player_name, stats in players.items():
+            kills = stats["kills"]
+            deaths = stats["deaths"]
+            damage = stats["damage"]
+            kast_total = stats["kast"]
+            matches = stats["matches"]
+
+            kd = f"{kills}-{deaths}"
+            diff = f"{'+' if kills - deaths >= 0 else ''}{kills - deaths}"
+            adr = f"{(damage / deaths):.1f}" if deaths != 0 else "0.0"
+            kast = f"{(kast_total / matches):.1f}%"
+
+            team_entry["players"].append((player_name, kd, diff, adr, kast))
+
+        teams.append(team_entry)
+
+    return teams
+
+async def _create_image_from_stats(datas: list) -> str:
+    # Crear una imagen base
+    width, height = 450, 450
+    img = Image.new('RGB', (width, height), color=(36, 45, 60))
+    draw = ImageDraw.Draw(img)
+
+
+    # Colores
+    white = (255, 255, 255)
+    gray = (180, 180, 180)
+    green = (0, 255, 0)
+    red = (255, 64, 64)
+    blue = (100, 149, 237)
+
+    # Dibujar contenido
+    # # Reutilizar fuentes y colores
+    column_titles = ["K-D", "+/-", "ADR", "KAST"]
+    column_x = [150, 220, 270, 330, 390]
+
+    # Redibujar con mejor centrado
+    teams = await _get_teams_stats_from_json(datas)
+    y_offset = 20
+    for team in teams:
+        draw.text((width // 2 - draw.textlength(team["name"]) // 2, y_offset),
+                team["name"], fill=blue)
+        y_offset += 30
+
+        # Column titles
+        draw.text((50, y_offset), "Player", fill=gray)
+        for title, x in zip(column_titles, column_x):
+            draw.text((x, y_offset), title, fill=gray)
+        y_offset += 25
+
+        for player in team["players"]:
+            draw.text(((50 - (len(player[0]) / 2)), y_offset), player[0], fill=white)
+
+            for i, (stat, x) in enumerate(zip(player[1:], column_x)):
+                color = white
+                if i == 1:  # +/- column
+                    color = green if "+" in stat else red
+                draw.text((x, y_offset), stat, fill=color)
+            y_offset += 28
+
+        y_offset += 25
+
+    # Guardar imagen centrada
+    output_path_centered = "./discord_match_stats_centered.png"
+    img.save(output_path_centered)
+    return output_path_centered
 
 # API paths
 @app.get('/match_configs/{file_name}')
@@ -1531,7 +1637,6 @@ async def match_logs(game_id: str, request: Request):
         if data is None:
             await public_channel.send("NONO")
             return
-        file = discord.File(filepath, filename=random_filename)
         
         event_value = data.get('event')
 
@@ -1561,6 +1666,8 @@ async def match_logs(game_id: str, request: Request):
             message = f"""
                         {team_winner.name} wins the map {map_number} - {map_name}.\n The result was {team1_score}:{team2_score}.
                         """
+            image_path = await _create_image_from_stats([data])
+            file = discord.File(image_path, filename=os.path.basename(image_path))
             await public_channel.send(message, file=file)
             await _set_result(game=game, team_number=team_number, map_name = map_name)
         elif event_value == "map_vetoed":
