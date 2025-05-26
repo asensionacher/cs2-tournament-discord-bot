@@ -55,14 +55,15 @@ swiss-round and knock-out stage.
 intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
-app = FastAPI()
-
 bot = commands.Bot(
     command_prefix=os.environ.get("BOT_PREFIX", "!"),
     description=description,
     intents=intents,
     help_command=None
 )
+
+# API for MatchZy events
+app = FastAPI()
 
 @bot.event
 async def on_ready():
@@ -72,8 +73,12 @@ async def on_ready():
 @bot.command()
 @discord.ext.commands.has_role("admin")
 async def help(ctx):
-    """Show help information based on user role"""
+    """
+    Show help information based on user role
+    Format: !help
+    """
 
+    # Commands information
     help_msg = (
         "🔧 **Initial Setup**\n"
         "• Send `!start` to create all necessary roles, categories and channels\n\n"
@@ -96,11 +101,14 @@ async def help(ctx):
         "• `!im_all_teams_captain` - Make my user captain of all teams\n"
     )
     await ctx.send(help_msg)
+
+    # Get admin channel id if exists
     admin_channel = bot.channel_service.get_channel_by_name(channel_name="admin", guild_id=ctx.guild.id)
     admin_channel_text = "#admin"
     if admin_channel is not None:
         admin_channel_text = f"<#{admin_channel.channel_id}>"
     
+    # How to use the bot help
     help_msg = (
         "**ℹ️How to use the bot:**\n"
         "1. Execute the bot with a `.env` file with all environment variables set. If not, the bot will not report automatically the results and vetoes.\n"
@@ -114,8 +122,6 @@ async def help(ctx):
     )
     await ctx.send(help_msg)
 
-    logging.info(f"Help message sent to {ctx.author.name}")
-
 @bot.command()
 async def start(ctx):
     """
@@ -128,7 +134,6 @@ async def start(ctx):
         # No matter if already started, but roles should not be created twice.
         start_executed_setting = bot.setting_service.get_setting_by_name(
             setting_key="start_executed", guild_id=guild.id)
-        
         if start_executed_setting is not None:
             if admin_role is not None:
                 await ctx.send("You must be an admin!")
@@ -209,12 +214,21 @@ async def start(ctx):
 @discord.ext.commands.has_role("admin")
 async def executercon(ctx, *command: str):
     """
-    Create a new team
-    Format: !create_team <team_name>
-    - team_name: Single word (e.g., "Iberian_Soul)
-    If it is a word separated by spaces, a '_' will be replaced
+    Executes rcon command into server
+    Format: !executercon <command>
+    - command: Multiple words (e.g., "changemap de_dust2)
     """
-    # Join multiple words and replace spaces with underscore only if multiple words
+    # Check if values are setted
+    if not ctx.channel.name == "admin":
+        await ctx.send("Must be executed from admin channel")
+        return
+    if (bot.SERVER_PORT is None or bot.SERVER_IP is None or bot.RCON_PASSWORD is None):
+        await ctx.send(
+            """ 
+            Environment variables SERVER_IP, SERVER_PORT, RCON_PASSWORD have to be setted for executing rcon commands.
+            """
+        )
+        return
     response = await _execute_rcon(command)
     await ctx.send(response)
 
@@ -432,6 +446,7 @@ async def im_all_teams_captain(ctx):
     """
     Make my user captain of all teams.
     Format: !im_all_teams_captain
+    NOTE: CAREFUL!! Use this only for testing
     """
     try:
         if not ctx.channel.name == "admin":
@@ -463,6 +478,7 @@ async def start_live_game(ctx):
     """
     guild = ctx.guild
     channel_id = ctx.channel.id
+    # Get game based on admin game where channel has been created
     game = bot.game_service.get_game_by_admin_game_channel_id(admin_game_channel_id=channel_id)
     admin_game_channel = bot.get_channel(channel_id)
     if game is None:
@@ -470,7 +486,7 @@ async def start_live_game(ctx):
         return
     
     # Environment variables WEBHOOK_BASE_URL, SERVER_IP, SERVER_PORT, RCON_PASSWORD have to be setted
-    if (bot.WEBHOOK_BASE_URL is None or bot.SERVER_IP is None or bot.RCON_PASSWORD is None):
+    if (bot.WEBHOOK_BASE_URL is None or bot.SERVER_IP is None or bot.RCON_PASSWORD is None or bot.SERVER_PORT is None):
         await ctx.send(""" 
             Environment variables WEBHOOK_BASE_URL, SERVER_IP, SERVER_PORT, RCON_PASSWORD have to be setted for live games.
             Please set the enviroment variables or start manually the game.
@@ -485,7 +501,6 @@ async def start_live_game(ctx):
         filename = f"/usr/src/app/match_configs/{game.id}.json"
         with open(filename, 'w') as f:
             f.write(json)
-            # Send JSON file to Discord channel
         
         file = discord.File(filename, filename=f"match_configs_game_{game.id}.json")
         await admin_game_channel.send("Match config:", file=file)
@@ -517,6 +532,7 @@ async def autovetoautoresults(ctx):
     """
     autovetoautoresults 
     Format: !autovetoautoresults
+    NOTE: CAREFUL!! Use this only for testing
     """
     try:
         guild = ctx.guild
@@ -545,6 +561,11 @@ async def autovetoautoresults(ctx):
         
 
 async def _get_matchzy_values(game: Game) -> str:
+    """
+    Get json for configurate the Matchzy game
+    More info at https://shobhit-pathak.github.io/MatchZy/match_setup/
+    """
+
     match_id = str(game.id)
     team_one = bot.team_service.get_team_by_id(game.team_one_id) 
     team_two = bot.team_service.get_team_by_id(game.team_two_id) 
@@ -586,6 +607,7 @@ async def _get_matchzy_values(game: Game) -> str:
 
     data['players_per_team'] = 5
 
+    # Return the json with indent for sending it as file
     return json.dumps(data, indent=4)    
     
 def setup_logging():
@@ -635,6 +657,9 @@ def setup_database():
     logging.info("Database and services initialized")
 
 def setup_vars():
+    """
+    Initialize values from environment values.
+    """
     default_map_pool = "inferno,anubis,nuke,ancient,mirage,train,dust2"
 
     bot.MAP_POOL = os.environ.get("MAP_POOL", default_map_pool).split(',')
@@ -649,10 +674,6 @@ def setup_vars():
     bot.SERVER_IP=os.environ.get("SERVER_IP", None)
     bot.SERVER_PORT=os.environ.get("SERVER_PORT", None)
     bot.RCON_PASSWORD=os.environ.get("RCON_PASSWORD", None)
-
-def _is_valid_team_name(name: str) -> bool:
-    """Allows alphanumeric + spaces, no symbols"""
-    return all(c.isalnum() or c.isspace() for c in name)
 
 async def _create_team(ctx, name:str) -> Team:
     """
@@ -1385,6 +1406,9 @@ async def _set_result(game: Game, team_number: int, map_name: str):
     await _game_summary(game=game)
 
 async def _execute_rcon(*command: str) -> str : 
+    """
+    Sends rcon command to host
+    """
     try:    
         command = ' '.join(command[0])
         response = await rcon(
@@ -1397,6 +1421,9 @@ async def _execute_rcon(*command: str) -> str :
         return f"❌ Error on execute_rcon. Start manually the game on the server: {e}"
 
 async def _auto_veto(guild_id: int) -> list:
+    """
+    Sends auto veto for testing
+    """
     # Get all not finished games
     response = []
     games = bot.game_service.get_all_games_not_finished(guild_id=guild_id)
@@ -1429,6 +1456,9 @@ async def _auto_veto(guild_id: int) -> list:
     return response
     
 async def _auto_result(guild_id: int) -> list:
+    """
+    Sends auto result for testing
+    """
     # Get all not finished games
     response = []
     games = bot.game_service.get_all_games_not_finished(guild_id=guild_id)
@@ -1448,6 +1478,9 @@ async def _auto_result(guild_id: int) -> list:
     return response
 
 async def _send_veto(matchid: int, team: str, map_name: str) -> str:
+    """
+    Sends veto for testing
+    """
     data = {}
     data['event'] = "map_vetoed"
     data['matchid'] = matchid
@@ -1461,6 +1494,9 @@ async def _send_veto(matchid: int, team: str, map_name: str) -> str:
     return cmd
 
 async def _send_pick(matchid: int, team: str, map_name: str, map_number: int) -> str:
+    """
+    Sends pick for testing
+    """
     data = {}
     data['event'] = "map_picked"
     data['matchid'] = matchid
@@ -1475,6 +1511,9 @@ async def _send_pick(matchid: int, team: str, map_name: str, map_number: int) ->
     return cmd
 
 async def _send_result(matchid: int, map_number: int, winner_team: str) -> str:
+    """
+    Sends result for testing
+    """
     json_base = '{"event":"map_result","matchid":14272,"map_number":0,"team1":{"id":"2843","name":"Iberian Soul","series_score":0,"score":14,"score_ct":10,"score_t":14,"players":[{"steamid":"76561198279375306","name":"s1mple1","stats":{"kills":34,"deaths":8,"assists":5,"flash_assists":3,"team_kills":0,"suicides":0,"damage":2948,"utility_damage":173,"enemies_flashed":6,"friendlies_flashed":2,"knife_kills":1,"headshot_kills":19,"rounds_played":27,"bomb_defuses":4,"bomb_plants":3,"1k":3,"2k":2,"3k":3,"4k":0,"5k":1,"1v1":1,"1v2":3,"1v3":2,"1v4":0,"1v5":1,"first_kills_t":6,"first_kills_ct":5,"first_deaths_t":1,"first_deaths_ct":1,"trade_kills":3,"kast":23,"score":45,"mvp":4}},{"steamid":"76561198279375306","name":"s1mple2","stats":{"kills":12,"deaths":8,"assists":5,"flash_assists":3,"team_kills":0,"suicides":0,"damage":1348,"utility_damage":173,"enemies_flashed":6,"friendlies_flashed":2,"knife_kills":1,"headshot_kills":19,"rounds_played":27,"bomb_defuses":4,"bomb_plants":3,"1k":3,"2k":2,"3k":3,"4k":0,"5k":1,"1v1":1,"1v2":3,"1v3":2,"1v4":0,"1v5":1,"first_kills_t":6,"first_kills_ct":5,"first_deaths_t":1,"first_deaths_ct":1,"trade_kills":3,"kast":33,"score":45,"mvp":4}},{"steamid":"76561198279375306","name":"s1mple3","stats":{"kills":12,"deaths":8,"assists":5,"flash_assists":3,"team_kills":0,"suicides":0,"damage":1348,"utility_damage":173,"enemies_flashed":6,"friendlies_flashed":2,"knife_kills":1,"headshot_kills":19,"rounds_played":27,"bomb_defuses":4,"bomb_plants":3,"1k":3,"2k":2,"3k":3,"4k":0,"5k":1,"1v1":1,"1v2":3,"1v3":2,"1v4":0,"1v5":1,"first_kills_t":6,"first_kills_ct":5,"first_deaths_t":1,"first_deaths_ct":1,"trade_kills":3,"kast":33,"score":45,"mvp":4}},{"steamid":"76561198279375306","name":"s1mple4","stats":{"kills":12,"deaths":8,"assists":5,"flash_assists":3,"team_kills":0,"suicides":0,"damage":1348,"utility_damage":173,"enemies_flashed":6,"friendlies_flashed":2,"knife_kills":1,"headshot_kills":19,"rounds_played":27,"bomb_defuses":4,"bomb_plants":3,"1k":3,"2k":2,"3k":3,"4k":0,"5k":1,"1v1":1,"1v2":3,"1v3":2,"1v4":0,"1v5":1,"first_kills_t":6,"first_kills_ct":5,"first_deaths_t":1,"first_deaths_ct":1,"trade_kills":3,"kast":33,"score":45,"mvp":4}},{"steamid":"76561198279375306","name":"s1mple5","stats":{"kills":12,"deaths":8,"assists":5,"flash_assists":3,"team_kills":0,"suicides":0,"damage":1348,"utility_damage":173,"enemies_flashed":6,"friendlies_flashed":2,"knife_kills":1,"headshot_kills":19,"rounds_played":27,"bomb_defuses":4,"bomb_plants":3,"1k":3,"2k":2,"3k":3,"4k":0,"5k":1,"1v1":1,"1v2":3,"1v3":2,"1v4":0,"1v5":1,"first_kills_t":6,"first_kills_ct":5,"first_deaths_t":1,"first_deaths_ct":1,"trade_kills":3,"kast":33,"score":45,"mvp":4}}],"side":"ct","starting_side":"ct"},"team2":{"id":"2843","name":"Natus Vincere","series_score":0,"score":14,"score_ct":10,"score_t":14,"players":[{"steamid":"76561198279375306","name":"s1mple1","stats":{"kills":34,"deaths":8,"assists":5,"flash_assists":3,"team_kills":0,"suicides":0,"damage":2948,"utility_damage":173,"enemies_flashed":6,"friendlies_flashed":2,"knife_kills":1,"headshot_kills":19,"rounds_played":27,"bomb_defuses":4,"bomb_plants":3,"1k":3,"2k":2,"3k":3,"4k":0,"5k":1,"1v1":1,"1v2":3,"1v3":2,"1v4":0,"1v5":1,"first_kills_t":6,"first_kills_ct":5,"first_deaths_t":1,"first_deaths_ct":1,"trade_kills":3,"kast":23,"score":45,"mvp":4}},{"steamid":"76561198279375306","name":"s1mple2","stats":{"kills":12,"deaths":8,"assists":5,"flash_assists":3,"team_kills":0,"suicides":0,"damage":1348,"utility_damage":173,"enemies_flashed":6,"friendlies_flashed":2,"knife_kills":1,"headshot_kills":19,"rounds_played":27,"bomb_defuses":4,"bomb_plants":3,"1k":3,"2k":2,"3k":3,"4k":0,"5k":1,"1v1":1,"1v2":3,"1v3":2,"1v4":0,"1v5":1,"first_kills_t":6,"first_kills_ct":5,"first_deaths_t":1,"first_deaths_ct":1,"trade_kills":3,"kast":33,"score":45,"mvp":4}},{"steamid":"76561198279375306","name":"s1mple3","stats":{"kills":12,"deaths":8,"assists":5,"flash_assists":3,"team_kills":0,"suicides":0,"damage":1348,"utility_damage":173,"enemies_flashed":6,"friendlies_flashed":2,"knife_kills":1,"headshot_kills":19,"rounds_played":27,"bomb_defuses":4,"bomb_plants":3,"1k":3,"2k":2,"3k":3,"4k":0,"5k":1,"1v1":1,"1v2":3,"1v3":2,"1v4":0,"1v5":1,"first_kills_t":6,"first_kills_ct":5,"first_deaths_t":1,"first_deaths_ct":1,"trade_kills":3,"kast":33,"score":45,"mvp":4}},{"steamid":"76561198279375306","name":"s1mple4","stats":{"kills":12,"deaths":8,"assists":5,"flash_assists":3,"team_kills":0,"suicides":0,"damage":1348,"utility_damage":173,"enemies_flashed":6,"friendlies_flashed":2,"knife_kills":1,"headshot_kills":19,"rounds_played":27,"bomb_defuses":4,"bomb_plants":3,"1k":3,"2k":2,"3k":3,"4k":0,"5k":1,"1v1":1,"1v2":3,"1v3":2,"1v4":0,"1v5":1,"first_kills_t":6,"first_kills_ct":5,"first_deaths_t":1,"first_deaths_ct":1,"trade_kills":3,"kast":33,"score":45,"mvp":4}},{"steamid":"76561198279375306","name":"s1mple5","stats":{"kills":12,"deaths":8,"assists":5,"flash_assists":3,"team_kills":0,"suicides":0,"damage":1348,"utility_damage":173,"enemies_flashed":6,"friendlies_flashed":2,"knife_kills":1,"headshot_kills":19,"rounds_played":27,"bomb_defuses":4,"bomb_plants":3,"1k":3,"2k":2,"3k":3,"4k":0,"5k":1,"1v1":1,"1v2":3,"1v3":2,"1v4":0,"1v5":1,"first_kills_t":6,"first_kills_ct":5,"first_deaths_t":1,"first_deaths_ct":1,"trade_kills":3,"kast":33,"score":45,"mvp":4}}],"side":"ct","starting_side":"ct"},"winner":{"side":"ct","team":"team1"}}'
     data = json.loads(json_base)
     data['matchid'] = matchid
@@ -1487,6 +1526,9 @@ async def _send_result(matchid: int, map_number: int, winner_team: str) -> str:
     return cmd
 
 async def _get_teams_stats_from_json(datas: list) -> any: 
+    """
+    Gets team stats from a list of jsons
+    """
     teams_data = {}
     for data in datas:
         for team_key in ['team1', 'team2']:
@@ -1541,25 +1583,26 @@ async def _get_teams_stats_from_json(datas: list) -> any:
     return teams
 
 async def _create_image_from_stats(datas: list) -> str:
-    # Crear una imagen base
+    """
+    Creates an image to be sended to the public game channel for informaiton
+    """
+    # Creates the base image
     width, height = 450, 450
     img = Image.new('RGB', (width, height), color=(36, 45, 60))
     draw = ImageDraw.Draw(img)
 
-
-    # Colores
+    # Colors
     white = (255, 255, 255)
     gray = (180, 180, 180)
     green = (0, 255, 0)
     red = (255, 64, 64)
     blue = (100, 149, 237)
 
-    # Dibujar contenido
-    # # Reutilizar fuentes y colores
+    # Draw content
     column_titles = ["K-D", "+/-", "ADR", "KAST"]
     column_x = [150, 220, 270, 330, 390]
 
-    # Redibujar con mejor centrado
+    # Get stats and redraw with the values
     teams = await _get_teams_stats_from_json(datas)
     y_offset = 20
     for team in teams:
@@ -1585,7 +1628,7 @@ async def _create_image_from_stats(datas: list) -> str:
 
         y_offset += 25
 
-    # Guardar imagen centrada
+    # Save image
     output_path_centered = "./discord_match_stats_centered.png"
     img.save(output_path_centered)
     return output_path_centered
@@ -1593,6 +1636,14 @@ async def _create_image_from_stats(datas: list) -> str:
 # API paths
 @app.get('/match_configs/{file_name}')
 async def match_configs_file(file_name: str):
+    """
+    Sends Matchzy match_config for configuring a match
+    More info at https://shobhit-pathak.github.io/MatchZy/match_setup/
+    matchzy_loadmatch_url <url> [header name] [header value]: 
+        Loads a remote (JSON-formatted) match configuration by sending an HTTP(S) GET to the given URL. 
+        You may optionally provide an HTTP header and value pair using the header name and header value arguments. 
+        You should put all arguments inside quotation marks (""). ("").
+    """
     # Read the corresponding JSON file
     try:
         with open(f'/usr/src/app/match_configs/{file_name}', 'r') as f:
@@ -1602,7 +1653,15 @@ async def match_configs_file(file_name: str):
 
 @app.post('/match_logs/{game_id}')
 async def match_logs(game_id: str, request: Request):
+    """
+    Receives logs from Matchzy events
+    More info at:
+        - https://shobhit-pathak.github.io/MatchZy/configuration/#events-and-http-logging
+        - https://shobhit-pathak.github.io/MatchZy/events.html
+    """
     try:
+        # First do common tasks for events
+
         # Create directory if it doesn't exist
         os.makedirs('/usr/src/app/match_logs', exist_ok=True)
 
@@ -1630,10 +1689,9 @@ async def match_logs(game_id: str, request: Request):
 
         logging.error(data)
         
-        if event_value == "series_start":  
-            #await asyncio.wait_for(public_channel.send("Starting game"), timeout=5)
+        if event_value == "series_start":  # If series started, Send a message to start game
             await public_channel.send("Starting game")          
-        elif event_value == "map_result": 
+        elif event_value == "map_result": # If match finishes, set map finished and send the stats to public channel
             winner = data.get('winner').get('team')
             map_number = data.get('map_number') + 1
             game_map = bot.game_map_service.get_by_game_id_game_number_game_map(game_id=game_id, game_number=map_number)
@@ -1658,7 +1716,7 @@ async def match_logs(game_id: str, request: Request):
             file = discord.File(image_path, filename=os.path.basename(image_path))
             await public_channel.send(message, file=file)
             await _set_result(game=game, team_number=team_number, map_name = map_name)
-        elif event_value == "map_vetoed":
+        elif event_value == "map_vetoed": # Set map vetoed
             vetoer = data.get('team')
             team_vetoer_id = -1
             if vetoer == "team1":
@@ -1682,7 +1740,7 @@ async def match_logs(game_id: str, request: Request):
                     await msg.edit(embed=embed)
                 except Exception as e:
                     await public_channel.send(f"⚠️ Veto added but failed to update display: {e}")
-        elif event_value == "map_picked":
+        elif event_value == "map_picked": # Set map picked
             picker = data.get('team')
             team_picker_id = -1
             if picker == "team1":
@@ -1709,8 +1767,8 @@ async def match_logs(game_id: str, request: Request):
                     await msg.edit(embed=embed)
                 except Exception as e:
                     await public_channel.send(f"⚠️ Pick added but failed to update display: {e}")
-        else:
-            await public_channel.send("NONONO")
+        else: # Else event is not accepted
+            logging.info(f"Event value not accepted: {event_value}")
         await _tournament_summary(guild_id=guild_id)
         return {"message": "Log saved successfully", "filename": random_filename}
     except Exception as e:
@@ -1719,8 +1777,10 @@ async def match_logs(game_id: str, request: Request):
 
 @app.post('/match_demos/{game_id}')
 async def match_demos(game_id: str, request: Request):
-    # Read the corresponding JSON file
-    # Generate random filename and save JSON from requestv body
+    """
+    Saves the demo from Matchzy
+    More info at https://shobhit-pathak.github.io/MatchZy/gotv/
+    """
     try:
         game = bot.game_service.get_game_by_id(game_id=int(game_id))
         public_channel = bot.get_channel(game.game_channel_id)
@@ -1746,11 +1806,17 @@ async def match_demos(game_id: str, request: Request):
         return {"error": f"Error writing demo file: {str(e)}"}
 
 async def run_api():
+    """
+    Starts api on port 8000
+    """
     config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="info")
     server = uvicorn.Server(config)
     await server.serve()
 
 async def main():
+    """
+    Starts all
+    """
     try:
         logging.info("Starting bot initialization...")
         
@@ -1771,4 +1837,7 @@ async def main():
         raise
 
 if __name__ == "__main__":
+    """
+    Executes main asyncronous
+    """
     asyncio.run(main())
