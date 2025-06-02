@@ -476,7 +476,7 @@ async def start_live_game(ctx):
     Start the game. 
     Format: !start_map
     """
-    guild = ctx.guild
+    await ctx.send("Trying to start live game...")
     channel_id = ctx.channel.id
     # Get game based on admin game where channel has been created
     game = bot.game_service.get_game_by_admin_game_channel_id(admin_game_channel_id=channel_id)
@@ -494,6 +494,8 @@ async def start_live_game(ctx):
         return
 
     json = await _get_matchzy_values(game=game)
+    team_one = bot.team_service.get_team_by_id(game.team_one_id) 
+    team_two = bot.team_service.get_team_by_id(game.team_two_id) 
 
     try:
         # Save JSON to local file
@@ -505,22 +507,28 @@ async def start_live_game(ctx):
         file = discord.File(filename, filename=f"match_configs_game_{game.id}.json")
         await admin_game_channel.send("Match config:", file=file)
         rcons = {
-            "matchzy_remote_log_url": {'matchzy_loadmatch_url', f"\"{bot.WEBHOOK_BASE_URL}/match_configs/{game.id}.json\""},
-            "matchzy_remote_log_url": {'matchzy_remote_log_url', f"\"{bot.WEBHOOK_BASE_URL}/match_logs/{game.id}\""},
-            "matchzy_demo_upload_url": {'matchzy_demo_upload_url', f"\"{bot.WEBHOOK_BASE_URL}/match_demos/{game.id}\""},
-            "matchzy_minimum_ready_required": {'matchzy_minimum_ready_required', '1'},
-            "matchzy_chat_prefix": {'matchzy_chat_prefix', "[{Green}" + bot.TOURNAMENT_NAME + "{Default}]"},
-            "matchzy_admin_chat_prefix": {'matchzy_admin_chat_prefix', "[{Red}Admin{Default}]"},
-            "matchzy_hostname_format": {'matchzy_hostname_format', "\"\""},
-            "matchzy_knife_enabled_default": {'matchzy_knife_enabled_default', "true"},
-            "matchzy_kick_when_no_match_loaded": {'matchzy_kick_when_no_match_loaded', "true"},
-            "matchzy_enable_damage_report": {'matchzy_enable_damage_report', 'false'}
+            "matchzy_loadmatch_url": f"\"{bot.WEBHOOK_BASE_URL}/match_configs/{game.id}.json\"",
+            "matchzy_remote_log_url": f"\"{bot.WEBHOOK_BASE_URL}/match_logs/{game.id}\"",
+            "matchzy_demo_upload_url": f"\"{bot.WEBHOOK_BASE_URL}/match_demos/{game.id}\"",
+            "matchzy_minimum_ready_required": "1",
+            "matchzy_chat_prefix": "[{Green}" + bot.TOURNAMENT_NAME + "{Default}]",
+            "matchzy_admin_chat_prefix": "[{Red}Admin{Default}]",
+            "matchzy_hostname_format": "\"\"",
+            "matchzy_knife_enabled_default": "true",
+            "matchzy_kick_when_no_match_loaded": "true",
+            "matchzy_enable_damage_report": "false",
+            "hostname": f"\"{bot.TOURNAMENT_NAME}-{team_one.name}vs{team_two.name}-{game.game_type}\"",
         }
-        for key, command in rcons.items():
-            logging.info(f"Executing rcon command `{command}`")
+        for key, value in rcons.items():
+            value = str(value)
+            logging.info(f"Executing rcon command `{key} {value}`")
+            await ctx.send(f"Executing rcon command `{key} {value}`")
+            command = (key, value,)
             response = await _execute_rcon(command)
             if response is not None and response != "":
                 logging.info(response)
+        await ctx.send("✅ Match config saved and game started successfully, please players join the game:")
+        await ctx.send(f"connect {bot.SERVER_IP}:{bot.SERVER_PORT}")
                 
     except Exception as e:
         logging.error(f"Error saving match config: {e}")
