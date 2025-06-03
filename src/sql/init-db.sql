@@ -109,3 +109,15 @@ CREATE TABLE IF NOT EXISTS summary (
      'quarterfinal', 'semifinal', 'final', 'third_place')) NOT NULL,
     message_id INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS game_server (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id INTEGER NOT NULL,
+    ip TEXT NOT NULL UNIQUE,
+    game_port INTEGER NOT NULL DEFAULT 27015,
+    rcon_password TEXT NOT NULL,
+    cstv_port INTEGER NOT NULL DEFAULT 27020,
+    is_free BOOLEAN NOT NULL DEFAULT TRUE,
+    game_id INTEGER NOT NULL DEFAULT -1,
+    FOREIGN KEY (game_id) REFERENCES game(id)
+);

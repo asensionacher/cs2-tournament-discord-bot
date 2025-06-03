@@ -58,6 +58,18 @@ class GameMapService:
             return GameMap(*row)
         return None
 
+    def get_last_not_finished_game_map(self, guild_id: int, game_id: int) -> Optional[GameMap]:
+        """Fetch the last game_map with a lower game_number that is not finished"""
+        cursor = self.conn.execute("""SELECT * FROM game_map 
+                    WHERE guild_id = ? AND game_id = ? AND team_id_winner <= 0
+                    ORDER BY game_number DESC
+                    LIMIT 1""", 
+                 (guild_id, game_id))
+        row = cursor.fetchone()
+        if row:
+            return GameMap(*row)
+        return None
+
     def get_by_game_id_game_number_game_map(self, game_id: int, game_number: int) -> Optional[GameMap]:
         """Fetch the first game_map with a lower game_number that is not finished"""
         cursor = self.conn.execute("""SELECT * FROM game_map 

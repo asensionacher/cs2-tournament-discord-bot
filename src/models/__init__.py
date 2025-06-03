@@ -14,6 +14,8 @@ from models.veto import Veto
 from models.channel import Channel
 from models.setting import Setting
 from models.summary import Summary
+from models.game_server import GameServer
 
 __all__ = ['Category', 'GameMap', 'Game', 'Pick', 'Player', 
-'ServerRole', 'Team', 'Veto', 'Channel', 'Setting', "Summary" ]  # Explicit exports
+'ServerRole', 'Team', 'Veto', 'Channel', 'Setting', "Summary",
+'GameServer' ]  # Explicit exports

@@ -31,6 +31,7 @@ from models.veto import Veto
 from models.pick import Pick
 from models.game_map import GameMap
 from models.summary import Summary
+from models.game_server import GameServer
 
 from services.team_service import TeamService
 from services.setting_service import SettingService
@@ -43,6 +44,7 @@ from services.veto_service import VetoService
 from services.pick_service import PickService
 from services.game_map_service import GameMapService
 from services.summary_service import SummaryService
+from services.game_server_service import GameServerService
 import uvicorn
 import uuid
 
@@ -212,7 +214,7 @@ async def start(ctx):
 
 @bot.command()
 @discord.ext.commands.has_role("admin")
-async def executercon(ctx, *command: str):
+async def executercon(ctx, *values: str):
     """
     Executes rcon command into server
     Format: !executercon <command>
@@ -222,14 +224,14 @@ async def executercon(ctx, *command: str):
     if not ctx.channel.name == "admin":
         await ctx.send("Must be executed from admin channel")
         return
-    if (bot.SERVER_PORT is None or bot.SERVER_IP is None or bot.RCON_PASSWORD is None):
-        await ctx.send(
-            """ 
-            Environment variables SERVER_IP, SERVER_PORT, RCON_PASSWORD have to be setted for executing rcon commands.
-            """
-        )
+    ip = values[0]
+    command = ' '.join(values[1:])
+
+    game_server = bot.game_server_service.get_game_server_by_ip(ip=ip)
+    if game_server is None:
+        await ctx.send("Game server don't exists")
         return
-    response = await _execute_rcon(command)
+    response = await _execute_rcon(game_server=game_server, command=command)
     await ctx.send(response)
 
 @bot.command()
@@ -471,10 +473,47 @@ async def im_all_teams_captain(ctx):
 
 @bot.command()
 @discord.ext.commands.has_role("admin")
+async def create_game_server(ctx, ip:str, game_port:int, rcon_password:str, cstv_port:int):
+    """
+    """
+    try:
+        if not ctx.channel.name == "admin":
+            await ctx.send("Must be executed from admin channel")
+            return
+        
+        game_server = GameServer(guild_id=ctx.guild.id, ip=ip, game_port=game_port, rcon_password=rcon_password, cstv_port=cstv_port)
+        bot.game_server_service.create_game_server(game_server)
+        
+        await ctx.send(f"Game server added to database.")
+    except Exception as e:
+        logging.error(f"Error during create_game_server command: {e}")
+        await ctx.send(f"❌ Error during create_game_server command: {e}")
+
+@bot.command()
+@discord.ext.commands.has_role("admin")
+async def delete_game_server(ctx, ip:str):
+    """
+    """
+    try:
+        if not ctx.channel.name == "admin":
+            await ctx.send("Must be executed from admin channel")
+            return
+        
+        game_server = bot.game_server_service.get_game_server_by_ip(ip=ip)
+        bot.game_server_service.delete_game_server_by_id(id=game_server.id)
+        
+        await ctx.send(f"Game server removed from database.")
+    except Exception as e:
+        logging.error(f"Error during delete_game_server command: {e}")
+        await ctx.send(f"❌ Error during delete_game_server command: {e}")
+
+
+@bot.command()
+@discord.ext.commands.has_role("admin")
 async def start_live_game(ctx):
     """
     Start the game. 
-    Format: !start_map
+    Format: !start_start_live_game
     """
     await ctx.send("Trying to start live game...")
     channel_id = ctx.channel.id
@@ -484,18 +523,23 @@ async def start_live_game(ctx):
     if game is None:
         await ctx.send("This must be sent from a admin game channel.")
         return
-    
-    # Environment variables WEBHOOK_BASE_URL, SERVER_IP, SERVER_PORT, RCON_PASSWORD have to be setted
-    if (bot.WEBHOOK_BASE_URL is None or bot.SERVER_IP is None or bot.RCON_PASSWORD is None or bot.SERVER_PORT is None):
-        await ctx.send(""" 
-            Environment variables WEBHOOK_BASE_URL, SERVER_IP, SERVER_PORT, RCON_PASSWORD have to be setted for live games.
-            Please set the enviroment variables or start manually the game.
-            """)
-        return
 
     json = await _get_matchzy_values(game=game)
     team_one = bot.team_service.get_team_by_id(game.team_one_id) 
     team_two = bot.team_service.get_team_by_id(game.team_two_id) 
+
+    game_server = bot.game_server_service.get_game_server_by_game_id(game_id=game.id)
+    if game_server is not None:
+        await ctx.send(f"Game already configured at {game_server.ip}:{game_server.game_port}")
+        return
+
+    game_server = bot.game_server_service.get_free_game_server(guild_id=ctx.guild.id)
+    if game_server is None:
+        await ctx.send("There is not free game server at this moment.")
+        return
+    game_server.is_free = False
+    game_server.game_id = game.id
+    bot.game_server_service.update_game_server(game_server)
 
     try:
         # Save JSON to local file
@@ -507,32 +551,130 @@ async def start_live_game(ctx):
         file = discord.File(filename, filename=f"match_configs_game_{game.id}.json")
         await admin_game_channel.send("Match config:", file=file)
         rcons = {
-            "matchzy_loadmatch_url": f"\"{bot.WEBHOOK_BASE_URL}/match_configs/{game.id}.json\"",
-            "matchzy_remote_log_url": f"\"{bot.WEBHOOK_BASE_URL}/match_logs/{game.id}\"",
-            "matchzy_demo_upload_url": f"\"{bot.WEBHOOK_BASE_URL}/match_demos/{game.id}\"",
-            "matchzy_minimum_ready_required": "1",
-            "matchzy_chat_prefix": "[{Green}" + bot.TOURNAMENT_NAME + "{Default}]",
-            "matchzy_admin_chat_prefix": "[{Red}Admin{Default}]",
-            "matchzy_hostname_format": "\"\"",
-            "matchzy_knife_enabled_default": "true",
-            "matchzy_kick_when_no_match_loaded": "true",
-            "matchzy_enable_damage_report": "false",
-            "hostname": f"\"{bot.TOURNAMENT_NAME}-{team_one.name}vs{team_two.name}-{game.game_type}\"",
+            "matchzy_loadmatch_url": f"matchzy_loadmatch_url \"{bot.WEBHOOK_BASE_URL}/match_configs/{game.id}.json\"",
+            "matchzy_remote_log_url": f"matchzy_remote_log_url \"{bot.WEBHOOK_BASE_URL}/match_logs/{game.id}\"",
+            "matchzy_demo_upload_url": f"matchzy_demo_upload_url \"{bot.WEBHOOK_BASE_URL}/match_demos/{game.id}\"",
+            "matchzy_minimum_ready_required": "matchzy_minimum_ready_required 1",
+            "matchzy_chat_prefix": "matchzy_chat_prefix [{Green}" + bot.TOURNAMENT_NAME + "{Default}]",
+            "matchzy_admin_chat_prefix": "matchzy_admin_chat_prefix [{Red}Admin{Default}]",
+            "matchzy_hostname_format": "matchzy_hostname_format \"\"",
+            "matchzy_knife_enabled_default": "matchzy_knife_enabled_default true",
+            "matchzy_kick_when_no_match_loaded": "matchzy_kick_when_no_match_loaded true",
+            "matchzy_enable_damage_report": "matchzy_enable_damage_report false",
+            "hostname": f"hostname \"{bot.TOURNAMENT_NAME}-{team_one.name}vs{team_two.name}-{game.game_type}\"",
         }
         for key, value in rcons.items():
-            value = str(value)
-            logging.info(f"Executing rcon command `{key} {value}`")
-            await ctx.send(f"Executing rcon command `{key} {value}`")
-            command = (key, value,)
-            response = await _execute_rcon(command)
+            logging.info(f"Executing rcon command `{value}`")
+            await ctx.send(f"Executing rcon command `{value}`")
+            response = await _execute_rcon(game_server=game_server, command=value)
             if response is not None and response != "":
                 logging.info(response)
         await ctx.send("✅ Match config saved and game started successfully, please players join the game:")
-        await ctx.send(f"connect {bot.SERVER_IP}:{bot.SERVER_PORT}")
+        await ctx.send(f"connect {game_server.ip}:{game_server.game_port}")
                 
     except Exception as e:
         logging.error(f"Error saving match config: {e}")
         await ctx.send(f"❌ Error saving match config. Start manually the game on the server: {e}")
+
+@bot.command()
+@discord.ext.commands.has_role("admin")
+async def map_result(ctx, team1_score: int, team2_score: int):
+    """
+    Start the game. 
+    Format: !map_result <team1_score> <team2_score>
+    """
+    channel_id = ctx.channel.id
+    # Get game based on admin game where channel has been created
+    game = bot.game_service.get_game_by_admin_game_channel_id(admin_game_channel_id=channel_id)
+    if game is None:
+        await ctx.send("This must be sent from a admin game channel.")
+        return
+    team_one = bot.team_service.get_team_by_id(game.team_one_id) 
+    team_two = bot.team_service.get_team_by_id(game.team_two_id)
+    team_number = 1 
+    team_winner = team_one
+    if team1_score == team2_score:
+        await ctx.send("A map cannot be draw.")
+        return
+    if team1_score < team2_score:
+        team_winner = team_two
+        team_number = 2
+    game_map = bot.game_map_service.get_first_not_finished_game_map(guild_id=ctx.guild.id, game_id=game.id)
+    message = f"""
+                {team_winner.name} wins the map {game_map.game_number} - {game_map.map_name}.\n The result was {team1_score}:{team2_score}.
+                """
+    public_channel = bot.get_channel(game.game_channel_id)
+    await public_channel.send(message)
+    await _set_result(game=game, team_number=team_number, map_name=game_map.map_name)
+
+@bot.command()
+@discord.ext.commands.has_role("admin")
+async def map_vetoed(ctx, vetoer: str, map_name: str):
+    channel_id = ctx.channel.id
+    # Get game based on admin game where channel has been created
+    game = bot.game_service.get_game_by_admin_game_channel_id(admin_game_channel_id=channel_id)
+    if game is None:
+        await ctx.send("This must be sent from a admin game channel.")
+        return
+    team_one = bot.team_service.get_team_by_id(game.team_one_id) 
+    team_two = bot.team_service.get_team_by_id(game.team_two_id) 
+    team_vetoer_id = -1
+    if vetoer == "team1":
+        team_vetoer_id = team_one.id
+    elif vetoer == "team2":
+        team_vetoer_id = team_two.id
+    game_id = game.id
+    vetoes = bot.veto_service.get_all_vetoes_by_game_id_only(game_id=game_id)
+    picks = bot.pick_service.get_all_picks_by_game_id_only(game_id=game_id)
+    
+    order_veto = len(vetoes)
+    order_pick = len(picks)
+    all_order = order_veto + order_pick
+    veto = Veto(order_veto=all_order + 1, game_id=game_id, team_id=team_vetoer_id, map_name=map_name, guild_id=game.guild_id)
+    bot.veto_service.create_veto(veto)
+    embed = await _game_embed(game)
+    public_channel = bot.get_channel(game.game_channel_id)
+    msg = await public_channel.fetch_message(game.public_game_message_id)
+    await msg.edit(embed=embed)
+
+@bot.command()
+@discord.ext.commands.has_role("admin")
+async def map_picked(ctx, picker: str, map_name: str):
+    channel_id = ctx.channel.id
+    # Get game based on admin game where channel has been created
+    game = bot.game_service.get_game_by_admin_game_channel_id(admin_game_channel_id=channel_id)
+    if game is None:
+        await ctx.send("This must be sent from a admin game channel.")
+        return
+    team_one = bot.team_service.get_team_by_id(game.team_one_id) 
+    team_two = bot.team_service.get_team_by_id(game.team_two_id) 
+    team_picker_id = -1
+    if picker == "team1":
+        team_picker_id = team_one.id
+    elif picker == "team2":
+        team_picker_id = team_two.id
+    game_id = game.id
+    
+    vetoes = bot.veto_service.get_all_vetoes_by_game_id_only(game_id=game_id)
+    picks = bot.pick_service.get_all_picks_by_game_id_only(game_id=game_id)
+    
+    order_veto = len(vetoes)
+    order_pick = len(picks)
+    all_order = order_veto + order_pick
+    pick = Pick(order_pick=all_order + 1, game_id=game_id, team_id=team_picker_id, map_name=map_name, guild_id=game.guild_id)
+    bot.pick_service.create_pick(pick)
+
+    map_number = 1
+    game_map = bot.game_map_service.get_last_not_finished_game_map(guild_id=ctx.guild.id, game_id=game.id)
+    if game_map is not None:
+        map_number = game_map.game_number + 1
+    
+    game_map = GameMap(game_number=map_number, map_name=pick.map_name, game_id=game.id, team_id_winner=-1, guild_id=game.guild_id)
+    bot.game_map_service.create_game_map(game_map)             
+    embed = await _game_embed(game)
+    public_channel = bot.get_channel(game.game_channel_id)
+    msg = await public_channel.fetch_message(game.public_game_message_id)
+    await msg.edit(embed=embed)        
 
 @bot.command()
 @discord.ext.commands.has_role("admin")
@@ -578,8 +720,14 @@ async def _get_matchzy_values(game: Game) -> str:
     team_one = bot.team_service.get_team_by_id(game.team_one_id) 
     team_two = bot.team_service.get_team_by_id(game.team_two_id) 
 
-    players_team_one = bot.player_service.get_players_by_team_id(team_one.id)
-    players_team_two = bot.player_service.get_players_by_team_id(team_two.id)
+    captains_team_one = bot.player_service.get_players_by_team_id_and_role_name(team_one.id, "captain")
+    captains_team_two = bot.player_service.get_players_by_team_id_and_role_name(team_two.id, "captain")
+
+    players_team_one = bot.player_service.get_players_by_team_id_and_role_name(team_one.id, "player")
+    players_team_two = bot.player_service.get_players_by_team_id_and_role_name(team_two.id, "player")
+
+    coaches_team_one = bot.player_service.get_players_by_team_id_and_role_name(team_one.id, "coach")
+    coaches_team_two = bot.player_service.get_players_by_team_id_and_role_name(team_two.id, "coach")
 
     game_to_wins = await _get_game_to_wins(game=game)
     num_maps = int(game_to_wins.replace('bo',''))
@@ -590,7 +738,11 @@ async def _get_matchzy_values(game: Game) -> str:
     team1 = {}
     team1['name'] = team_one.name
     players = {}
+    for player in captains_team_one:
+        players[player.steamid] = player.nickname
     for player in players_team_one:
+        players[player.steamid] = player.nickname
+    for player in coaches_team_one:
         players[player.steamid] = player.nickname
     team1['players'] = players
     data['team1'] = team1
@@ -598,7 +750,11 @@ async def _get_matchzy_values(game: Game) -> str:
     team2 = {}
     team2['name'] = team_two.name
     players = {}
+    for player in captains_team_two:
+        players[player.steamid] = player.nickname
     for player in players_team_two:
+        players[player.steamid] = player.nickname
+    for player in coaches_team_two:
         players[player.steamid] = player.nickname
     team2['players'] = players
     data['team2'] = team2
@@ -662,6 +818,7 @@ def setup_database():
     bot.pick_service = PickService(bot.db.get_connection())
     bot.game_map_service = GameMapService(bot.db.get_connection())
     bot.summary_service = SummaryService(bot.db.get_connection())
+    bot.game_server_service = GameServerService(bot.db.get_connection())
     logging.info("Database and services initialized")
 
 def setup_vars():
@@ -679,9 +836,6 @@ def setup_vars():
     bot.THIRD_PLACE_ROUND=os.environ.get("THIRD_PLACE_ROUND", "bo3")
     bot.TOURNAMENT_NAME=os.environ.get("TOURNAMENT_NAME", "MY_TOURNAMENT")
     bot.WEBHOOK_BASE_URL=os.environ.get("WEBHOOK_BASE_URL", None)
-    bot.SERVER_IP=os.environ.get("SERVER_IP", None)
-    bot.SERVER_PORT=os.environ.get("SERVER_PORT", None)
-    bot.RCON_PASSWORD=os.environ.get("RCON_PASSWORD", None)
 
 async def _create_team(ctx, name:str) -> Team:
     """
@@ -1102,7 +1256,14 @@ async def _create_game(ctx, game: Game, category: discord.CategoryChannel):
     game_to_wins = await _get_game_to_wins(game=game)
     embed.description = f"Game between {team_one.name} vs {team_two.name} of type {game_to_wins}.\n"
     
-    embed.add_field(name="Waiting", value=f"Waiting the admin to execute `!start_live_game`", inline=False)
+    embed.add_field(name="Waiting", value="Waiting the admin to execute `!start_live_game`", inline=False)
+    not_live_message = """
+                    You can manually set picks, vetoes and map_results.
+                    Use `!map_vetoed <team1|team2> <map_name>` for vetoing a map.
+                    Use `!map_picked <team1|team2> <map_name>` for picking a map.
+                    Use `!map_result <team1_score> <team2_score>` for setting the current map score.
+                    """
+    embed.add_field(name="Not live", value=not_live_message, inline=False)
     msg = await admin_channel.send(embed=embed)
     bot.game_service.update_game(game)
 
@@ -1413,15 +1574,14 @@ async def _set_result(game: Game, team_number: int, map_name: str):
     
     await _game_summary(game=game)
 
-async def _execute_rcon(*command: str) -> str : 
+async def _execute_rcon(game_server:GameServer, command: str) -> str : 
     """
     Sends rcon command to host
     """
     try:    
-        command = ' '.join(command[0])
         response = await rcon(
             command,
-            host=bot.SERVER_IP, port=int(bot.SERVER_PORT), passwd=bot.RCON_PASSWORD
+            host=game_server.ip, port=game_server.game_port, passwd=game_server.rcon_password
         )
         return response
     except Exception as e:
@@ -1499,6 +1659,7 @@ async def _send_veto(matchid: int, team: str, map_name: str) -> str:
     data = json.dumps(data)
 
     cmd = f"curl -X POST {url} -H \"Content-Type: application/json\" -d '{data}'"
+    logging.info(cmd)
     return cmd
 
 async def _send_pick(matchid: int, team: str, map_name: str, map_number: int) -> str:
@@ -1527,10 +1688,10 @@ async def _send_result(matchid: int, map_number: int, winner_team: str) -> str:
     data['matchid'] = matchid
     data['map_number'] = map_number
     data['winner']['team'] = winner_team
-    json = json.dumps(data)
+    data = json.dumps(data)
     url = f"{bot.WEBHOOK_BASE_URL}/match_logs/{matchid}"
 
-    cmd = f"curl -X POST {url} -H \"Content-Type: application/json\" -d '{json}'"
+    cmd = f"curl -X POST {url} -H \"Content-Type: application/json\" -d '{data}'"
     return cmd
 
 async def _get_teams_stats_from_json(datas: list) -> any: 
@@ -1775,6 +1936,13 @@ async def match_logs(game_id: str, request: Request):
                     await msg.edit(embed=embed)
                 except Exception as e:
                     await public_channel.send(f"⚠️ Pick added but failed to update display: {e}")
+        elif event_value == "series_end": # Set server free
+            game_server = bot.game_server_service.get_game_server_by_game_id(game_id)
+            await _execute_rcon(game_server=game_server, command="matchzy_loadmatch_url \"\"")
+            game_server.is_free = True
+            game_server.game_id = -1
+            bot.game_server_service.update_game_server(game_server)
+
         else: # Else event is not accepted
             logging.info(f"Event value not accepted: {event_value}")
         await _tournament_summary(guild_id=guild_id)

@@ -58,6 +58,16 @@ class PlayerService:
             (team_id,)
             )
         ]
+
+    def get_players_by_team_id_and_role_name(self, team_id: int, role_name: str) -> List[Player]:
+        """Fetch a player by team_id"""
+        return [
+            Player(*row) 
+            for row in self.conn.execute(
+            "SELECT * FROM player WHERE team_id = ? AND role_name = ?", 
+            (team_id, role_name)
+            )
+        ]
     
     def delete_player_by_id(self, id: int):
         """Delete player by id"""
