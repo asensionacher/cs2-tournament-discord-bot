@@ -607,6 +607,12 @@ async def map_result(ctx, team1_score: int, team2_score: int):
     await public_channel.send(message)
     await _set_result(game=game, team_number=team_number, map_name=game_map.map_name)
 
+    game_server = bot.game_server_service.get_game_server_by_game_id(game.id)
+    if game_server is not None:
+        game_server.is_free = True
+        game_server.game_id = -1
+        bot.game_server_service.update_game_server(game_server)
+
 @bot.command()
 @discord.ext.commands.has_role("admin")
 async def map_vetoed(ctx, vetoer: str, map_name: str):
@@ -1260,7 +1266,7 @@ async def _create_game(ctx, game: Game, category: discord.CategoryChannel):
     not_live_message = """
                     You can manually set picks, vetoes and map_results.
                     Use `!map_vetoed <team1|team2> <map_name>` for vetoing a map.
-                    Use `!map_picked <team1|team2> <map_name>` for picking a map.
+                    Use `!map_picked <team1|team2|decider> <map_name>` for picking a map.
                     Use `!map_result <team1_score> <team2_score>` for setting the current map score.
                     """
     embed.add_field(name="Not live", value=not_live_message, inline=False)
